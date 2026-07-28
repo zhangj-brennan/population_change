@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>County Population Change, 2020–2025</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <main class="county-map-app">
+    <header class="map-header">
+      <h1>County population change, 2020–2025</h1>
+      
+    </header>
+
+
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading county boundaries and population data…
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="visualization" class="visualization" hidden>
+      <aside class="left-panel">
+
+        <section class="controls" aria-label="Map controls">
+
+
+      <div class="control-group">
+        <div class="control-label">Measure</div>
+        <div class="button-row" id="metric-controls">
+          <button type="button" class="is-active" data-value="count">Count change</button>
+          <button type="button" data-value="percent">Percent change</button>
+        </div>
+      </div>
+
+      <!-- <div class="control-group">
+        <div class="control-label">County type</div>
+        <div class="button-row" id="division-controls">
+          <button type="button" class="is-active" data-value="all">All</button>
+          <button type="button" data-value="urban">Urban</button>
+          <button type="button" data-value="suburban">Suburban</button>
+          <button type="button" data-value="rural">Rural</button>
+        </div>
+      </div> -->
+
+      <div class="control-group population-chart-group">
+        <div class="control-label">Population Groups</div>
+        <div class="population-chart-wrap">
+          <svg
+            id="population-chart"
+            viewBox="0 0 280 210"
+            role="img"
+            aria-label="Percent population change by race and ethnicity for the United States"
+          ></svg>
+          <div id="population-chart-tooltip" class="population-chart-tooltip" aria-hidden="true"></div>
+        </div>
+        <div id="population-chart-key" class="population-chart-key" aria-label="Population groups"></div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">Comparison Years</div>
+        <div class="year-controls">
+          <label for="start-year">
+            <span>Compare</span>
+            <select id="start-year" aria-label="Start year"></select>
+          </label>
+
+          <label for="end-year">
+            <span>to</span>
+            <select id="end-year" aria-label="End year"></select>
+          </label>
+        </div>
+      </div>
+      
+        </section>
+
+        <section class="state-selector">
+        <div class="control-label">Select a state</div>
+        <div id="state-grid" class="state-grid"></div>
+        <button type="button" id="reset-state" class="reset-state">Show all states</button>
+
+        <!-- <p class="method-note">
+          County types use 2023 Rural-Urban Continuum Codes:
+          Urban = 1–3, Suburban = 4–6, Rural = 7–9.
+          Percent change is unavailable when the 2020 population is zero.
+        </p> -->
+        </section>
+      </aside>
+
+      <div class="map-column">
+         <div class="legend-row">
+          <div>
+            <div id="legend-gradient" class="legend-gradient"></div>
+            <div class="legend-values">
+              <span id="legend-min"></span>
+              <span>0</span>
+              <span id="legend-max"></span>
+            </div>
+          </div>
+          <div id="legend-label" class="legend-label"></div>
+        </div>
+        <div class="map-wrap">
+          <svg
+            id="county-map"
+            viewBox="0 0 975 610"
+            role="img"
+            aria-label="Interactive map of county population change"
+          ></svg>
+          <div id="tooltip" class="tooltip" aria-hidden="true"></div>
+        </div>
+
+
+        <div id="status" class="status" aria-live="polite"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
