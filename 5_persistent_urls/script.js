@@ -58,13 +58,13 @@ const GROUPS = {
 };
 
 const GROUP_COLORS = {
-  total: "#111111",
-  white: "#6f6f6f",
-  black: "#9E0B0F",
-  native: "#8E6C3A",
-  asian: "#7A4FA3",
-  pacific: "#3995B2",
-  latino: "#ED1C24"
+  total:    "#111111",
+  white:    "#9E9E9E",
+  black:    "#6A3D9A",
+  latino:   "#E66101",
+  asian:    "#0072B2",
+  native:   "#A6761D",
+  pacific:  "#1B9E77"
 };
 
 const STATE_GRID = [
