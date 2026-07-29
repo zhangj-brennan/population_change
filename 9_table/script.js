@@ -159,8 +159,10 @@ function readURLState() {
   const endYear = Number(params.get("end"));
   const selectedState = params.get("state");
   const selectedRegion = params.get("region");
-  const filterMin = Number(params.get("min"));
-  const filterMax = Number(params.get("max"));
+  const hasFilterMin = params.has("min");
+  const hasFilterMax = params.has("max");
+  const filterMin = hasFilterMin ? Number(params.get("min")) : null;
+  const filterMax = hasFilterMax ? Number(params.get("max")) : null;
 
   if (groups.length) appState.groups = groups.includes("total") ? ["total"] : groups;
   if (["all", "urban", "suburban", "rural"].includes(division)) appState.division = division;
@@ -176,7 +178,13 @@ function readURLState() {
     appState.selectedState = null;
   }
 
-  if (Number.isFinite(filterMin) && Number.isFinite(filterMax) && filterMin <= filterMax) {
+  if (
+    hasFilterMin &&
+    hasFilterMax &&
+    Number.isFinite(filterMin) &&
+    Number.isFinite(filterMax) &&
+    filterMin <= filterMax
+  ) {
     appState.valueFilterMin = filterMin;
     appState.valueFilterMax = filterMax;
   }
