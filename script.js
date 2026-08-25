@@ -1,6 +1,6 @@
 const FILES = {
   population: "data/Vintage 2025 counties race & ethnicity 1.csv",
-  rucc: "data/Ruralurbancontinuumcodes2023.csv",
+  rucc: "data/rural_urban_continuum_codes_2023.csv",
   counties: "data/counties_2025_s.geojson"
 };
 
@@ -143,10 +143,12 @@ const appState = {
   endYear: 2025,
   selectedState: null,
   selectedRegion: null,
-  valueFilterMin: null,
-  valueFilterMax: null,
-  valueFilterSignature: null
+  highlightedCountyFips: null,
+  tableSort: null,
+  signFilter: "all"
 };
+
+let requestedCountyFips = null;
 
 function readURLState() {
   const params = new URLSearchParams(window.location.search);
@@ -155,18 +157,17 @@ function readURLState() {
     .filter(groupKey => GROUPS[groupKey]);
   const division = params.get("division");
   const metric = params.get("metric");
+  const signFilter = params.get("sign");
   const startYear = Number(params.get("start"));
   const endYear = Number(params.get("end"));
   const selectedState = params.get("state");
   const selectedRegion = params.get("region");
-  const hasFilterMin = params.has("min");
-  const hasFilterMax = params.has("max");
-  const filterMin = hasFilterMin ? Number(params.get("min")) : null;
-  const filterMax = hasFilterMax ? Number(params.get("max")) : null;
+  const county = params.get("county");
 
   if (groups.length) appState.groups = groups.includes("total") ? ["total"] : groups;
   if (["all", "urban", "suburban", "rural"].includes(division)) appState.division = division;
   if (["count", "percent"].includes(metric)) appState.metric = metric;
+  if (["all", "positive", "negative"].includes(signFilter)) appState.signFilter = signFilter;
   if (Number.isInteger(startYear) && startYear > 0) appState.startYear = startYear;
   if (Number.isInteger(endYear) && endYear > 0) appState.endYear = endYear;
 
@@ -178,15 +179,10 @@ function readURLState() {
     appState.selectedState = null;
   }
 
-  if (
-    hasFilterMin &&
-    hasFilterMax &&
-    Number.isFinite(filterMin) &&
-    Number.isFinite(filterMax) &&
-    filterMin <= filterMax
-  ) {
-    appState.valueFilterMin = filterMin;
-    appState.valueFilterMax = filterMax;
+  requestedCountyFips = county || null;
+
+  if (county && countyByFips.has(county)) {
+    appState.highlightedCountyFips = county;
   }
 }
 
@@ -195,6 +191,7 @@ function updateURLState() {
   url.searchParams.set("groups", appState.groups.join(","));
   url.searchParams.set("division", appState.division);
   url.searchParams.set("metric", appState.metric);
+  url.searchParams.set("sign", appState.signFilter);
   url.searchParams.set("start", String(appState.startYear));
   url.searchParams.set("end", String(appState.endYear));
 
@@ -204,13 +201,8 @@ function updateURLState() {
   if (appState.selectedRegion) url.searchParams.set("region", appState.selectedRegion);
   else url.searchParams.delete("region");
 
-  if (Number.isFinite(appState.valueFilterMin) && Number.isFinite(appState.valueFilterMax)) {
-    url.searchParams.set("min", String(appState.valueFilterMin));
-    url.searchParams.set("max", String(appState.valueFilterMax));
-  } else {
-    url.searchParams.delete("min");
-    url.searchParams.delete("max");
-  }
+  if (appState.highlightedCountyFips) url.searchParams.set("county", appState.highlightedCountyFips);
+  else url.searchParams.delete("county");
 
   window.history.replaceState(null, "", url);
 }
@@ -225,18 +217,25 @@ let countyByFips = new Map();
 let countySelection;
 let countyLayer;
 let stateLayer;
+let highlightLayer;
+let featuresByFips = new Map();
 let path;
 let statesGeoJSON;
 let availableYears = [];
 let nationalPopulationByYear = new Map();
 let populationChartLineSelection;
 let populationChartKeySelection;
+let countySearchIndex = [];
+let countySearchResults = [];
+let countySearchActiveIndex = -1;
 
 readURLState();
 buildPopulationChartKey();
 buildStateDropdown();
 buildRegionDropdown();
 wireStaticControls();
+wireCountySearch();
+wireCountyTableSorting();
 loadData();
 
 async function loadData() {
@@ -261,9 +260,30 @@ async function loadData() {
 
     countyRows = buildCountyRecords(population, ruccLookup);
     countyByFips = new Map(countyRows.map(row => [row.fips, row]));
+    buildCountySearchIndex();
 
     drawMap(geoJSON);
+
+    if (requestedCountyFips && countyByFips.has(requestedCountyFips)) {
+      appState.highlightedCountyFips = requestedCountyFips;
+      const row = countyByFips.get(requestedCountyFips);
+      document.querySelector("#county-search-input").value =
+        `${row.countyName}, ${row.stateName}`;
+      appState.selectedState = row.stateFips;
+      appState.selectedRegion = null;
+      zoomToStateFips([row.stateFips]);
+    }
+
     updateMap();
+    updateStateDropdown();
+    updateRegionDropdown();
+
+    const searchInput = document.querySelector("#county-search-input");
+    searchInput.disabled = false;
+
+    if (appState.highlightedCountyFips) {
+      document.querySelector("#county-search-clear").hidden = false;
+    }
 
     loading.hidden = true;
     visualization.hidden = false;
@@ -319,16 +339,14 @@ function buildRuccLookup(rows) {
   const lookup = new Map();
 
   rows.forEach(row => {
-    if (row.Attribute !== "RUCC_2023") {
-      return;
-    }
-
     const fips = String(row.FIPS).replace(/\.0$/, "").padStart(5, "0");
-    const rucc = Number(row.Value);
+    const rucc = Number(row.RUCC_2023);
+    const hasRucc = row.RUCC_2023 !== "" && Number.isFinite(rucc);
 
     lookup.set(fips, {
-      rucc,
-      division: divisionFromRucc(rucc)
+      rucc: hasRucc ? rucc : null,
+      division: hasRucc ? divisionFromRucc(rucc) : null,
+      description: row.Description || null
     });
   });
 
@@ -356,7 +374,8 @@ function buildCountyRecords(populationRows, ruccLookup) {
 
     const rucc = ruccLookup.get(fips) || {
       rucc: null,
-      division: null
+      division: null,
+      description: null
     };
 
     const values = {};
@@ -376,6 +395,7 @@ function buildCountyRecords(populationRows, ruccLookup) {
       countyName: referenceRow.countyName,
       rucc: rucc.rucc,
       division: rucc.division,
+      description: rucc.description,
       values
     });
   });
@@ -417,8 +437,11 @@ function drawMap(geoJSON) {
 
   path = d3.geoPath(projection);
 
+  featuresByFips = new Map(includedFeatures.map(feature => [featureFips(feature), feature]));
+
   countyLayer = svg.append("g").attr("class", "county-layer");
   stateLayer = svg.append("g").attr("class", "state-layer");
+  highlightLayer = svg.append("g").attr("class", "highlight-layer");
 
   countySelection = countyLayer
     .selectAll("path")
@@ -484,6 +507,12 @@ function selectedPopulationLabel() {
     .join(" + ");
 }
 
+function selectedPopulationTitleLabel() {
+  return appState.groups
+    .map(groupKey => groupKey === "total" ? "Total" : GROUPS[groupKey].label)
+    .join(" + ");
+}
+
 function valueForCounty(row) {
   if (!row) return null;
 
@@ -507,10 +536,55 @@ function valueForCounty(row) {
   return (change / start) * 100;
 }
 
+function matchesSignFilter(value) {
+  if (appState.signFilter === "positive") return value > 0;
+  if (appState.signFilter === "negative") return value < 0;
+  return true;
+}
+
+function updateSignFilterOptions(geographyRows) {
+  const select = document.querySelector("#sign-filter");
+  if (!select) return;
+
+  const values = geographyRows.map(valueForCounty);
+  const format = d3.format(",");
+
+  const counts = {
+    all: values.filter(Number.isFinite).length,
+    positive: values.filter(value => value > 0).length,
+    negative: values.filter(value => value < 0).length
+  };
+
+  const labels = {
+    all: "all change",
+    positive: "increase only",
+    negative: "decrease only"
+  };
+
+  Object.entries(counts).forEach(([key, count]) => {
+    const option = select.querySelector(`option[value="${key}"]`);
+    if (option) {
+      option.textContent = `${labels[key]} (${format(count)} counties)`;
+    }
+  });
+}
+
 function updateMap() {
-  const eligibleRows = countyRows.filter(row =>
-    appState.division === "all" ||
-    row.division === appState.division
+  updateMapTitle();
+
+  const geographyRows = countyRows.filter(row =>
+    (appState.division === "all" || row.division === appState.division) &&
+    (!appState.selectedState || row.stateFips === appState.selectedState) &&
+    (
+      !appState.selectedRegion ||
+      REGION_STATE_FIPS[appState.selectedRegion].has(row.stateFips)
+    )
+  );
+
+  updateSignFilterOptions(geographyRows);
+
+  const eligibleRows = geographyRows.filter(row =>
+    matchesSignFilter(valueForCounty(row))
   );
 
   const values = eligibleRows
@@ -527,15 +601,13 @@ const positiveValues = values
   .sort(d3.ascending);
 
 /*
-  Independently cap losses and gains at the 90th percentile.
-  This prevents a few extreme counties on either side from
-  flattening the rest of the map.
+  Cap losses and gains at the true max within the currently selected
+  geography/division, so the ramp always uses its full range: the
+  most extreme county on each side always reads as the darkest color.
 */
-const negativeLimit =
-  d3.quantile(negativeValues, 0.90) || 1;
+const negativeLimit = d3.max(negativeValues) || 1;
 
-const positiveLimit =
-  d3.quantile(positiveValues, 0.90) || 1;
+const positiveLimit = d3.max(positiveValues) || 1;
 
 /*
   The square-root transform gives moderate county changes
@@ -565,28 +637,6 @@ const filterStep = appState.metric === "percent" ? 5 : 1000;
 const trueExtent = d3.extent(values);
 const filterDomainMin = Math.floor((trueExtent[0] || 0) / filterStep) * filterStep;
 const filterDomainMax = Math.ceil((trueExtent[1] || 0) / filterStep) * filterStep;
-const filterSignature = [
-  appState.metric,
-  appState.startYear,
-  appState.endYear,
-  [...appState.groups].sort().join(",")
-].join("|");
-
-if (appState.valueFilterSignature !== filterSignature) {
-  appState.valueFilterSignature = filterSignature;
-
-  const hasValidSavedRange =
-    Number.isFinite(appState.valueFilterMin) &&
-    Number.isFinite(appState.valueFilterMax) &&
-    appState.valueFilterMin >= filterDomainMin &&
-    appState.valueFilterMax <= filterDomainMax &&
-    appState.valueFilterMin <= appState.valueFilterMax;
-
-  if (!hasValidSavedRange) {
-    appState.valueFilterMin = filterDomainMin;
-    appState.valueFilterMax = filterDomainMax;
-  }
-}
 
 const colorScale = d3.scaleDiverging()
   .domain([-1, 0, 1])
@@ -594,7 +644,7 @@ const colorScale = d3.scaleDiverging()
     d3.interpolateRgbBasis([
       "#FFCF01",
       "#ffffff",
-      "#3995B2"
+      "#711471"
     ])
   )
   .clamp(true);
@@ -605,7 +655,8 @@ const colorScale = d3.scaleDiverging()
         (
           appState.division !== "all" &&
           row.division !== appState.division
-        );
+        ) ||
+        !matchesSignFilter(valueForCounty(row));
     })
     .classed("is-dimmed", feature => {
       const stateFips = featureStateFips(feature);
@@ -620,15 +671,6 @@ const colorScale = d3.scaleDiverging()
 
       return false;
     })
-    .classed("is-value-filtered", feature => {
-      const row = countyByFips.get(featureFips(feature));
-      const value = valueForCounty(row);
-
-      return Number.isFinite(value) && (
-        value < appState.valueFilterMin ||
-        value > appState.valueFilterMax
-      );
-    })
     .attr("fill", feature => {
       const row = countyByFips.get(featureFips(feature));
 
@@ -640,13 +682,28 @@ const colorScale = d3.scaleDiverging()
       ) {
         return "#ededed";
       }
+
+      if (!matchesSignFilter(valueForCounty(row))) {
+        return "#ededed";
+      }
 const value = valueForCounty(row);
 const scaledValue = colorValue(value);
 
-return scaledValue === null
-  ? "#d9d9d9"
-  : colorScale(scaledValue);
+if (scaledValue === null) return "#d9d9d9";
+if (scaledValue === 0) return "#bfbfbf";
+return colorScale(scaledValue);
     });
+
+const highlightedFeature = appState.highlightedCountyFips
+  ? featuresByFips.get(appState.highlightedCountyFips)
+  : null;
+
+highlightLayer
+  .selectAll("path")
+  .data(highlightedFeature ? [highlightedFeature] : [])
+  .join("path")
+  .attr("class", "county-highlight-outline")
+  .attr("d", path);
 
 const legendGradient = buildLegendGradient(
   filterDomainMin,
@@ -655,7 +712,7 @@ const legendGradient = buildLegendGradient(
   colorScale
 );
 
-updateLegend(filterDomainMin, filterDomainMax, filterStep, legendGradient);
+updateLegend(filterDomainMin, filterDomainMax, legendGradient);
   updatePopulationChartSelection();
   updateStateDropdown();
   updateRegionDropdown();
@@ -664,74 +721,66 @@ updateLegend(filterDomainMin, filterDomainMax, filterStep, legendGradient);
   updateURLState();
 }
 
+const LEGEND_WIDTH_PX = 240;
+const LEGEND_ZERO_BAND_PX = 10;
+const LEGEND_ZERO_COLOR = "#EBEAE9";
+
 function buildLegendGradient(domainMin, domainMax, colorValue, colorScale) {
   const stopCount = 120;
   const span = domainMax - domainMin || 1;
+
+  const colorAt = position => {
+    const rawValue = domainMin + position * span;
+    const scaledValue = colorValue(rawValue);
+    return scaledValue === null ? "#d9d9d9" : colorScale(scaledValue);
+  };
+
+  const zeroFraction = Math.min(1, Math.max(0, (0 - domainMin) / span));
+  const halfBandFraction = (LEGEND_ZERO_BAND_PX / 2) / LEGEND_WIDTH_PX;
+  const bandStart = Math.max(0, zeroFraction - halfBandFraction);
+  const bandEnd = Math.min(1, zeroFraction + halfBandFraction);
+
   const stops = [];
 
   for (let index = 0; index <= stopCount; index += 1) {
     const position = index / stopCount;
-    const rawValue = domainMin + position * span;
-    const scaledValue = colorValue(rawValue);
-    const color = scaledValue === null ? "#d9d9d9" : colorScale(scaledValue);
-    stops.push(`${color} ${(position * 100).toFixed(3)}%`);
+    if (position < bandStart) {
+      stops.push(`${colorAt(position)} ${(position * 100).toFixed(3)}%`);
+    }
+  }
+
+  stops.push(`#ffffff ${(bandStart * 100).toFixed(3)}%`);
+  stops.push(`${LEGEND_ZERO_COLOR} ${(bandStart * 100).toFixed(3)}%`);
+  stops.push(`${LEGEND_ZERO_COLOR} ${(bandEnd * 100).toFixed(3)}%`);
+  stops.push(`#ffffff ${(bandEnd * 100).toFixed(3)}%`);
+
+  for (let index = 0; index <= stopCount; index += 1) {
+    const position = index / stopCount;
+    if (position > bandEnd) {
+      stops.push(`${colorAt(position)} ${(position * 100).toFixed(3)}%`);
+    }
   }
 
   return `linear-gradient(90deg, ${stops.join(", ")})`;
 }
 
-function updateLegend(domainMin, domainMax, step, gradient) {
+function updateLegend(domainMin, domainMax, gradient) {
   const formatter = appState.metric === "percent"
     ? value => `${d3.format(".0f")(value)}%`
     : value => d3.format(",.0f")(value);
 
-  const lowerInput = document.querySelector("#legend-lower");
-  const upperInput = document.querySelector("#legend-upper");
   const gradientElement = document.querySelector("#legend-gradient");
 
   gradientElement.style.background = gradient;
-
-  [lowerInput, upperInput].forEach(input => {
-    input.min = domainMin;
-    input.max = domainMax;
-    input.step = step;
-  });
-
-  lowerInput.value = appState.valueFilterMin;
-  upperInput.value = appState.valueFilterMax;
 
   document.querySelector("#legend-min").textContent = formatter(domainMin);
   document.querySelector("#legend-max").textContent =
     domainMax > 0 ? `+${formatter(domainMax)}` : formatter(domainMax);
 
-  document.querySelector("#legend-lower-value").textContent =
-    formatter(appState.valueFilterMin);
-  document.querySelector("#legend-upper-value").textContent =
-    appState.valueFilterMax > 0
-      ? `+${formatter(appState.valueFilterMax)}`
-      : formatter(appState.valueFilterMax);
-
   document.querySelector("#legend-label").textContent =
     `${selectedPopulationLabel()} · ` +
     `${appState.startYear}–${appState.endYear} · ` +
-    (appState.metric === "count" ? "count change" : "percent change") +
-    ` · filter in ${appState.metric === "count" ? "1,000-person" : "5-point"} increments`;
-}
-
-function updateLegendFilterFromInputs(changed) {
-  const lowerInput = document.querySelector("#legend-lower");
-  const upperInput = document.querySelector("#legend-upper");
-  let lower = Number(lowerInput.value);
-  let upper = Number(upperInput.value);
-
-  if (lower > upper) {
-    if (changed === "lower") lower = upper;
-    else upper = lower;
-  }
-
-  appState.valueFilterMin = lower;
-  appState.valueFilterMax = upper;
-  updateMap();
+    (appState.metric === "count" ? "count change" : "percent change");
 }
 
 function countyPassesActiveFilters(row) {
@@ -750,12 +799,121 @@ function countyPassesActiveFilters(row) {
     REGION_STATE_FIPS[appState.selectedRegion].has(row.stateFips);
 
   const value = valueForCounty(row);
-  const valueMatch =
-    Number.isFinite(value) &&
-    value >= appState.valueFilterMin &&
-    value <= appState.valueFilterMax;
 
-  return divisionMatch && stateMatch && regionMatch && valueMatch;
+  return (
+    divisionMatch &&
+    stateMatch &&
+    regionMatch &&
+    Number.isFinite(value) &&
+    matchesSignFilter(value)
+  );
+}
+
+const COUNTY_TABLE_COLUMNS = {
+  county: {
+    type: "string",
+    accessor: d => d.row.countyName
+  },
+  state: {
+    type: "string",
+    accessor: d => d.row.stateName
+  },
+  type: {
+    type: "string",
+    accessor: d => d.row.description || (d.row.division ? capitalize(d.row.division) : "Unclassified")
+  },
+  start: {
+    type: "number",
+    accessor: d => d.start
+  },
+  end: {
+    type: "number",
+    accessor: d => d.end
+  },
+  change: {
+    type: "number",
+    accessor: d => d.change
+  },
+  percent: {
+    type: "number",
+    accessor: d => d.percent
+  }
+};
+
+function compareCountyTableRows(a, b, column, direction) {
+  const config = COUNTY_TABLE_COLUMNS[column];
+  const aValue = config.accessor(a);
+  const bValue = config.accessor(b);
+
+  const aMissing = config.type === "number" ? !Number.isFinite(aValue) : (aValue === null || aValue === undefined);
+  const bMissing = config.type === "number" ? !Number.isFinite(bValue) : (bValue === null || bValue === undefined);
+
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+
+  const comparison = d3.ascending(aValue, bValue);
+  return direction === "desc" ? -comparison : comparison;
+}
+
+function sortCountyTableRows(rows) {
+  if (appState.tableSort) {
+    const { column, direction } = appState.tableSort;
+
+    return rows.sort((a, b) => {
+      const comparison = compareCountyTableRows(a, b, column, direction);
+      if (comparison !== 0) return comparison;
+      return d3.ascending(a.row.countyName, b.row.countyName);
+    });
+  }
+
+  return rows.sort((a, b) => {
+    const valueDifference = valueForCounty(b.row) - valueForCounty(a.row);
+    if (valueDifference !== 0) return valueDifference;
+    return d3.ascending(a.row.countyName, b.row.countyName);
+  });
+}
+
+function handleCountyTableSortClick(column) {
+  if (appState.tableSort && appState.tableSort.column === column) {
+    appState.tableSort = {
+      column,
+      direction: appState.tableSort.direction === "asc" ? "desc" : "asc"
+    };
+  } else {
+    appState.tableSort = {
+      column,
+      direction: COUNTY_TABLE_COLUMNS[column].type === "number" ? "desc" : "asc"
+    };
+  }
+
+  updateCountyTable();
+}
+
+function updateCountyTableSortIndicators() {
+  document.querySelectorAll("#county-table thead .sort-button").forEach(button => {
+    const column = button.dataset.sortKey;
+    const arrow = button.querySelector(".sort-arrow");
+    const th = button.closest("th");
+    const isActive = appState.tableSort && appState.tableSort.column === column;
+
+    if (isActive) {
+      const direction = appState.tableSort.direction;
+      arrow.textContent = direction === "asc" ? "▲" : "▼";
+      th.setAttribute("aria-sort", direction === "asc" ? "ascending" : "descending");
+    } else {
+      arrow.textContent = "";
+      th.setAttribute("aria-sort", "none");
+    }
+  });
+}
+
+function wireCountyTableSorting() {
+  document.querySelectorAll("#county-table thead .sort-button").forEach(button => {
+    button.addEventListener("click", () => {
+      handleCountyTableSortClick(button.dataset.sortKey);
+    });
+  });
 }
 
 function updateCountyTable() {
@@ -763,20 +921,19 @@ function updateCountyTable() {
   const summary = document.querySelector("#county-table-summary");
   if (!body || !summary) return;
 
-  const rows = countyRows
-    .filter(countyPassesActiveFilters)
-    .map(row => {
-      const start = selectedPopulationValue(row, appState.startYear);
-      const end = selectedPopulationValue(row, appState.endYear);
-      const change = end - start;
-      const percent = start === 0 ? null : (change / start) * 100;
-      return { row, start, end, change, percent };
-    })
-    .sort((a, b) => {
-      const valueDifference = valueForCounty(b.row) - valueForCounty(a.row);
-      if (valueDifference !== 0) return valueDifference;
-      return d3.ascending(a.row.countyName, b.row.countyName);
-    });
+  const rows = sortCountyTableRows(
+    countyRows
+      .filter(countyPassesActiveFilters)
+      .map(row => {
+        const start = selectedPopulationValue(row, appState.startYear);
+        const end = selectedPopulationValue(row, appState.endYear);
+        const change = end - start;
+        const percent = start === 0 ? null : (change / start) * 100;
+        return { row, start, end, change, percent };
+      })
+  );
+
+  updateCountyTableSortIndicators();
 
   document.querySelector("#county-table-start-year").textContent = appState.startYear;
   document.querySelector("#county-table-end-year").textContent = appState.endYear;
@@ -794,7 +951,7 @@ function updateCountyTable() {
   }
 
   body.innerHTML = rows.map(({ row, start, end, change, percent }) => {
-    const divisionLabel = row.division ? capitalize(row.division) : "Unclassified";
+    const divisionLabel = row.description || (row.division ? capitalize(row.division) : "Unclassified");
     return `
       <tr>
         <td>${escapeHTML(row.countyName)}</td>
@@ -851,9 +1008,7 @@ function showTooltip(event, feature) {
     ? null
     : (change / start) * 100;
 
-  const divisionLabel = row.division
-    ? capitalize(row.division)
-    : "Unclassified";
+  const divisionLabel = row.description || (row.division ? capitalize(row.division) : "Unclassified");
 
   tooltip
     .style("opacity", 1)
@@ -865,7 +1020,7 @@ function showTooltip(event, feature) {
       ${appState.endYear}: ${d3.format(",")(end)}<br>
       Change: ${signedInteger(change)}<br>
       Percent: ${percent === null ? "N/A" : signedPercent(percent)}<br>
-      County type: ${divisionLabel}
+      County type: ${escapeHTML(divisionLabel)}
       ${row.rucc === null ? "" : ` (RUCC ${row.rucc})`}
     `);
 
@@ -940,6 +1095,11 @@ function zoomToStateFips(stateFipsList) {
       .duration(550)
       .attr("transform", null);
 
+    highlightLayer
+      .transition()
+      .duration(550)
+      .attr("transform", null);
+
     return;
   }
 
@@ -981,6 +1141,187 @@ function zoomToStateFips(stateFipsList) {
     .transition()
     .duration(650)
     .attr("transform", transform);
+
+  highlightLayer
+    .transition()
+    .duration(650)
+    .attr("transform", transform);
+}
+
+function buildCountySearchIndex() {
+  countySearchIndex = countyRows
+    .map(row => ({
+      fips: row.fips,
+      stateFips: row.stateFips,
+      countyName: row.countyName,
+      stateName: row.stateName,
+      label: `${row.countyName}, ${row.stateName}`
+    }))
+    .sort((a, b) => d3.ascending(a.countyName, b.countyName));
+}
+
+function searchCounties(query) {
+  const normalized = query.trim().toLowerCase();
+
+  if (!normalized) return [];
+
+  return countySearchIndex
+    .filter(entry => entry.label.toLowerCase().includes(normalized))
+    .sort((a, b) => {
+      const aStarts = a.countyName.toLowerCase().startsWith(normalized) ? 0 : 1;
+      const bStarts = b.countyName.toLowerCase().startsWith(normalized) ? 0 : 1;
+
+      if (aStarts !== bStarts) return aStarts - bStarts;
+
+      return d3.ascending(a.countyName, b.countyName);
+    })
+    .slice(0, 8);
+}
+
+function renderCountySearchSuggestions(results) {
+  countySearchResults = results;
+  countySearchActiveIndex = -1;
+
+  const list = document.querySelector("#county-search-suggestions");
+  const input = document.querySelector("#county-search-input");
+
+  list.innerHTML = "";
+
+  if (!results.length) {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    return;
+  }
+
+  results.forEach((entry, index) => {
+    const item = document.createElement("li");
+    item.id = `county-search-option-${index}`;
+    item.className = "county-search-option";
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", "false");
+    item.textContent = entry.label;
+    item.addEventListener("mousedown", event => {
+      event.preventDefault();
+      chooseCountySearchResult(entry);
+    });
+    list.appendChild(item);
+  });
+
+  list.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+}
+
+function updateCountySearchActiveOption() {
+  const options = document.querySelectorAll("#county-search-suggestions .county-search-option");
+  const input = document.querySelector("#county-search-input");
+
+  options.forEach((option, index) => {
+    const isActive = index === countySearchActiveIndex;
+    option.classList.toggle("is-active", isActive);
+    option.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  if (countySearchActiveIndex >= 0 && options[countySearchActiveIndex]) {
+    input.setAttribute("aria-activedescendant", options[countySearchActiveIndex].id);
+    options[countySearchActiveIndex].scrollIntoView({ block: "nearest" });
+  } else {
+    input.removeAttribute("aria-activedescendant");
+  }
+}
+
+function closeCountySearchSuggestions() {
+  const list = document.querySelector("#county-search-suggestions");
+  const input = document.querySelector("#county-search-input");
+
+  list.hidden = true;
+  list.innerHTML = "";
+  countySearchResults = [];
+  countySearchActiveIndex = -1;
+  input.setAttribute("aria-expanded", "false");
+  input.removeAttribute("aria-activedescendant");
+}
+
+function chooseCountySearchResult(entry) {
+  const input = document.querySelector("#county-search-input");
+  input.value = entry.label;
+  closeCountySearchSuggestions();
+  selectSearchedCounty(entry.fips);
+}
+
+function selectSearchedCounty(fips) {
+  const row = countyByFips.get(fips);
+  if (!row) return;
+
+  appState.highlightedCountyFips = fips;
+  selectState(row.stateFips);
+  updateStateDropdown();
+  updateRegionDropdown();
+
+  document.querySelector("#county-search-clear").hidden = false;
+}
+
+function clearSearchedCounty() {
+  if (!appState.highlightedCountyFips) return;
+
+  appState.highlightedCountyFips = null;
+  appState.selectedState = null;
+  appState.selectedRegion = null;
+
+  zoomToStateFips([]);
+  updateMap();
+  updateStateDropdown();
+  updateRegionDropdown();
+}
+
+function wireCountySearch() {
+  const input = document.querySelector("#county-search-input");
+  const clearButton = document.querySelector("#county-search-clear");
+
+  input.addEventListener("input", () => {
+    clearButton.hidden = !input.value;
+
+    if (!input.value) {
+      closeCountySearchSuggestions();
+      clearSearchedCounty();
+      return;
+    }
+
+    renderCountySearchSuggestions(searchCounties(input.value));
+  });
+
+  input.addEventListener("keydown", event => {
+    if (!countySearchResults.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      countySearchActiveIndex = Math.min(countySearchActiveIndex + 1, countySearchResults.length - 1);
+      updateCountySearchActiveOption();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      countySearchActiveIndex = Math.max(countySearchActiveIndex - 1, 0);
+      updateCountySearchActiveOption();
+    } else if (event.key === "Enter") {
+      if (countySearchActiveIndex >= 0) {
+        event.preventDefault();
+        chooseCountySearchResult(countySearchResults[countySearchActiveIndex]);
+      }
+    } else if (event.key === "Escape") {
+      closeCountySearchSuggestions();
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    window.setTimeout(closeCountySearchSuggestions, 100);
+  });
+
+  clearButton.addEventListener("click", () => {
+    input.value = "";
+    clearButton.hidden = true;
+    closeCountySearchSuggestions();
+    clearSearchedCounty();
+    input.focus();
+  });
 }
 
 function buildNationalPopulationByYear(populationRows) {
@@ -1003,20 +1344,21 @@ function buildNationalPopulationByYear(populationRows) {
   return totals;
 }
 
-function populationPercentChange(groupKey, year) {
+function populationChangeValue(groupKey, year) {
   const baselineYear = availableYears[0];
   const baseline = nationalPopulationByYear.get(baselineYear)?.[groupKey];
   const value = nationalPopulationByYear.get(year)?.[groupKey];
 
-  if (
-    !Number.isFinite(baseline) ||
-    !Number.isFinite(value) ||
-    baseline === 0
-  ) {
+  if (!Number.isFinite(baseline) || !Number.isFinite(value)) {
     return null;
   }
 
-  return ((value - baseline) / baseline) * 100;
+  if (appState.metric === "percent") {
+    if (baseline === 0) return null;
+    return ((value - baseline) / baseline) * 100;
+  }
+
+  return value - baseline;
 }
 
 function buildPopulationChartKey() {
@@ -1050,20 +1392,31 @@ function drawPopulationChart() {
   const svg = d3.select("#population-chart");
   svg.selectAll("*").remove();
 
+  svg.attr(
+    "aria-label",
+    appState.metric === "percent"
+      ? "Percent population change by race and ethnicity for the United States"
+      : "Population count change by race and ethnicity for the United States"
+  );
+
   const width = 280;
   const height = 210;
   const margin = {
     top: 10,
     right: 12,
     bottom: 28,
-    left: 38
+    left: appState.metric === "percent" ? 38 : 52
   };
+
+  const axisValueFormat = appState.metric === "percent"
+    ? value => `${d3.format(".1f")(value)}%`
+    : value => d3.format(",.0f")(value);
 
   const series = Object.keys(GROUPS).map(groupKey => ({
     groupKey,
     values: availableYears.map(year => ({
       year,
-      value: populationPercentChange(groupKey, year)
+      value: populationChangeValue(groupKey, year)
     }))
   }));
 
@@ -1118,7 +1471,7 @@ function drawPopulationChart() {
     .call(
       d3.axisLeft(y)
         .ticks(5)
-        .tickFormat(value => `${d3.format(".1f")(value)}%`)
+        .tickFormat(axisValueFormat)
     );
 
   const zeroY = y(0);
@@ -1224,7 +1577,7 @@ function showPopulationChartTooltip(event, group) {
     .map(point =>
       `${point.year}: ${
         Number.isFinite(point.value)
-          ? signedPercent(point.value)
+          ? (appState.metric === "percent" ? signedPercent(point.value) : signedInteger(point.value))
           : "N/A"
       }`
     )
@@ -1235,7 +1588,7 @@ function showPopulationChartTooltip(event, group) {
     .attr("aria-hidden", "false")
     .html(`
       <strong>${escapeHTML(GROUPS[group.groupKey].label)}</strong><br>
-      Percent change from ${availableYears[0]}<br>
+      ${appState.metric === "percent" ? "Percent" : "Count"} change from ${availableYears[0]}<br>
       ${values}
     `);
 
@@ -1295,7 +1648,7 @@ function populateYearControls() {
   endSelect.value = appState.endYear;
 
   updateYearOptions();
-  updateYearTitle();
+  updateMapTitle();
 }
 
 function updateYearOptions() {
@@ -1311,13 +1664,16 @@ function updateYearOptions() {
   });
 }
 
-function updateYearTitle() {
+function updateMapTitle() {
   const title = document.querySelector(".map-header h1");
 
-  if (title) {
-    title.textContent =
-      `County population change, ${appState.startYear}–${appState.endYear}`;
-  }
+  if (!title) return;
+
+  const metricLabel = appState.metric === "percent" ? "percent" : "count";
+
+  title.textContent =
+    `Showing ${metricLabel} ${selectedPopulationTitleLabel()} population change, ` +
+    `${appState.startYear}–${appState.endYear}`;
 }
 
 function wireYearControls() {
@@ -1327,7 +1683,7 @@ function wireYearControls() {
   startSelect.addEventListener("change", () => {
     appState.startYear = Number(startSelect.value);
     updateYearOptions();
-    updateYearTitle();
+    updateMapTitle();
     hideTooltip();
     updateMap();
   });
@@ -1335,7 +1691,7 @@ function wireYearControls() {
   endSelect.addEventListener("change", () => {
     appState.endYear = Number(endSelect.value);
     updateYearOptions();
-    updateYearTitle();
+    updateMapTitle();
     hideTooltip();
     updateMap();
   });
@@ -1384,33 +1740,59 @@ function updateRegionDropdown() {
 }
 
 function wireStaticControls() {
-  d3.selectAll("#division-controls button")
-    .classed("is-active", function () { return this.dataset.value === appState.division; });
   d3.selectAll("#metric-controls button")
     .classed("is-active", function () { return this.dataset.value === appState.metric; });
 
-  wireButtonGroup("#division-controls button", "division");
-  wireButtonGroup("#metric-controls button", "metric");
+  wireButtonGroup("#metric-controls button", "metric", drawPopulationChart);
   wireYearControls();
 
-  document.querySelector("#legend-lower")
-    .addEventListener("input", () => updateLegendFilterFromInputs("lower"));
-
-  document.querySelector("#legend-upper")
-    .addEventListener("input", () => updateLegendFilterFromInputs("upper"));
+  document.querySelector("#sign-filter")
+    .addEventListener("change", event => {
+      appState.signFilter = event.target.value;
+      updateMap();
+    });
 
   document.querySelector("#state-select")
     .addEventListener("change", event => {
-      selectState(event.target.value || null);
+      const stateFips = event.target.value || null;
+      const highlightedRow = countyByFips.get(appState.highlightedCountyFips);
+
+      if (highlightedRow && highlightedRow.stateFips !== stateFips) {
+        resetCountySearch();
+      }
+
+      selectState(stateFips);
     });
 
   document.querySelector("#region-select")
     .addEventListener("change", event => {
-      selectRegion(event.target.value || null);
+      const regionKey = event.target.value || null;
+      const highlightedRow = countyByFips.get(appState.highlightedCountyFips);
+
+      if (
+        highlightedRow &&
+        (!regionKey || !REGION_STATE_FIPS[regionKey].has(highlightedRow.stateFips))
+      ) {
+        resetCountySearch();
+      }
+
+      selectRegion(regionKey);
     });
 }
 
-function wireButtonGroup(selector, stateKey) {
+function resetCountySearch() {
+  appState.highlightedCountyFips = null;
+
+  const input = document.querySelector("#county-search-input");
+  const clearButton = document.querySelector("#county-search-clear");
+
+  if (input) input.value = "";
+  if (clearButton) clearButton.hidden = true;
+
+  closeCountySearchSuggestions();
+}
+
+function wireButtonGroup(selector, stateKey, onChange) {
   d3.selectAll(selector).on("click", function () {
     appState[stateKey] = this.dataset.value;
 
@@ -1418,6 +1800,7 @@ function wireButtonGroup(selector, stateKey) {
     d3.select(this).classed("is-active", true);
 
     updateMap();
+    if (onChange) onChange();
   });
 }
 
@@ -1425,23 +1808,38 @@ window.addEventListener("popstate", () => {
   appState.division = "all";
   appState.groups = ["total"];
   appState.metric = "count";
+  appState.signFilter = "all";
   appState.startYear = 2020;
   appState.endYear = 2025;
   appState.selectedState = null;
   appState.selectedRegion = null;
-  appState.valueFilterMin = null;
-  appState.valueFilterMax = null;
-  appState.valueFilterSignature = null;
+  appState.highlightedCountyFips = null;
+  appState.tableSort = null;
   readURLState();
 
   if (!availableYears.length || !countyLayer || !stateLayer) return;
 
   populateYearControls();
-  d3.selectAll("#division-controls button")
-    .classed("is-active", function () { return this.dataset.value === appState.division; });
   d3.selectAll("#metric-controls button")
     .classed("is-active", function () { return this.dataset.value === appState.metric; });
-  updatePopulationChartSelection();
+  drawPopulationChart();
+  updateStateDropdown();
+  updateRegionDropdown();
+
+  const signFilterSelect = document.querySelector("#sign-filter");
+  if (signFilterSelect) signFilterSelect.value = appState.signFilter;
+
+  const searchInput = document.querySelector("#county-search-input");
+  const searchClear = document.querySelector("#county-search-clear");
+
+  if (appState.highlightedCountyFips) {
+    const row = countyByFips.get(appState.highlightedCountyFips);
+    searchInput.value = row ? `${row.countyName}, ${row.stateName}` : "";
+    searchClear.hidden = false;
+  } else {
+    searchInput.value = "";
+    searchClear.hidden = true;
+  }
 
   const stateFipsList = appState.selectedState
     ? [appState.selectedState]

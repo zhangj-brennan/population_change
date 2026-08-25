@@ -38,7 +38,7 @@
 
 :root {
   --red: #FFCF01;
-  --blue: #3995B2;
+  --blue: #711471;
   --text: #111;
   --muted: #666;
   --border: #fff;
@@ -69,8 +69,8 @@ select {
 
 .map-header h1 {
   margin: 0 0 6px;
-  font-size:18px;
-  
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .map-header p {
@@ -123,6 +123,58 @@ select {
   color: #111;
   background: #fff;
   cursor: pointer;
+}
+
+.inline-select-sentence {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.inline-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.inline-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  margin: 0;
+  padding: 0 16px 0 0;
+  font: inherit;
+  font-weight: 700;
+  color: #111;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.inline-select:hover {
+  color: var(--blue);
+}
+
+.inline-select:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
+.inline-select-arrow {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #111;
+  pointer-events: none;
 }
 
 .button-row button,
@@ -241,8 +293,12 @@ select {
   opacity: 0.08;
 }
 
-.county.is-value-filtered {
-  opacity: 0.12;
+.county-highlight-outline {
+  fill: none;
+  stroke: #111;
+  stroke-width: 2.5;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .state-outline {
@@ -272,6 +328,8 @@ select {
 }
 
 .legend-row {
+  position: relative;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -282,101 +340,23 @@ select {
 
 .legend-filter {
   --legend-width: 240px;
-  --legend-thumb-half: 7px;
   width: var(--legend-width);
-}
-
-.legend-slider-wrap {
-  position: relative;
-  width: var(--legend-width);
-  height: 30px;
-  margin-top: 3px;
 }
 
 .legend-gradient {
-  position: absolute;
-  top: 9px;
-  left: var(--legend-thumb-half);
-  width: calc(var(--legend-width) - (var(--legend-thumb-half) * 2));
-  height: 12px;
-  border: 1px solid #aaa;
-  background: linear-gradient(90deg, var(--red), #f7f7f7, var(--blue));
-}
-
-.legend-range {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
   width: var(--legend-width);
-  height: 30px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  pointer-events: none;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.legend-range::-webkit-slider-runnable-track {
   height: 12px;
-  background: transparent;
+  margin-top: 6px;
+  border: 1px solid #aaa;
+  background: linear-gradient(90deg, var(--red), #ffffff, var(--blue));
 }
 
-.legend-range::-moz-range-track {
-  height: 12px;
-  background: transparent;
-}
-
-.legend-range::-webkit-slider-thumb {
-  width: 0;
-  height: 0;
-  margin-top: -7px;
-  border-right: 7px solid transparent;
-  border-left: 7px solid transparent;
-  border-top: 10px solid #111;
-  background: transparent;
-  cursor: ew-resize;
-  pointer-events: auto;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.legend-range-upper::-webkit-slider-thumb {
-  margin-top: 9px;
-  border-top: 0;
-  border-bottom: 10px solid #111;
-}
-
-.legend-range::-moz-range-thumb {
-  width: 0;
-  height: 0;
-  border: 0;
-  border-right: 7px solid transparent;
-  border-left: 7px solid transparent;
-  border-top: 10px solid #111;
-  border-radius: 0;
-  background: transparent;
-  cursor: ew-resize;
-  pointer-events: auto;
-}
-
-.legend-range-upper::-moz-range-thumb {
-  border-top: 0;
-  border-bottom: 10px solid #111;
-}
-
-.legend-values,
-.legend-selected-values {
+.legend-values {
   display: flex;
   width: var(--legend-width);
   justify-content: space-between;
   margin-top: 3px;
   font-size: 11px;
-}
-
-.legend-selected-values {
-  margin-top: 5px;
 }
 
 .legend-label,
@@ -389,13 +369,87 @@ select {
   margin-top: 7px;
 }
 
-.state-selector {
+.controls-row {
   position: relative;
-  z-index: 10;
+  z-index: 11;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
   margin-top: 22px;
+}
+
+.county-search-label {
+  display: grid;
+  min-width: 0;
+}
+
+.county-search-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.county-search-input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 24px 5px 6px;
+  border: 1px solid #777;
+  border-radius: 0;
+  color: #111;
+  background: #fff;
+  font-size: 14px;
+}
+
+.county-search-input:disabled {
+  color: var(--muted);
+  background: var(--inactive);
+  cursor: not-allowed;
+}
+
+.county-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.county-search-clear:hover {
+  color: #111;
+}
+
+.county-search-suggestions {
+  position: absolute;
+  z-index: 12;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid #777;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.county-search-option {
+  padding: 5px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.county-search-option.is-active,
+.county-search-option:hover {
+  color: #fff;
+  background: #111;
 }
 
 .state-select-label {
@@ -406,12 +460,13 @@ select {
 .state-select-label select {
   width: 100%;
   min-width: 0;
-  padding: 7px 28px 7px 8px;
+  padding: 5px 22px 5px 6px;
   border: 1px solid #777;
   border-radius: 0;
   color: #111;
   background: #fff;
   cursor: pointer;
+  font-size: 14px;
 }
 
 .state-grid {
@@ -579,6 +634,10 @@ select {
   .legend-filter {
     --legend-width: 200px;
   }
+
+  .controls-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 
@@ -631,6 +690,7 @@ select {
   position: sticky;
   top: 0;
   z-index: 1;
+  padding: 0;
   border-top: 1px solid #111;
   border-bottom: 1px solid #111;
   background: #fff;
@@ -640,6 +700,55 @@ select {
 .county-table td.numeric,
 .county-table th:nth-child(n + 4) {
   text-align: right;
+}
+
+.sort-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.sort-button:hover,
+.sort-button:focus-visible {
+  text-decoration: underline;
+}
+
+.county-table th:nth-child(n + 4) .sort-button {
+  justify-content: flex-end;
+}
+
+.sort-arrow {
+  min-width: 8px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.county-table td:nth-child(1),
+.county-table th:nth-child(1) {
+  max-width: 140px;
+  white-space: normal;
+}
+
+.county-table td:nth-child(2),
+.county-table th:nth-child(2) {
+  max-width: 110px;
+  white-space: normal;
+}
+
+.county-table td:nth-child(3),
+.county-table th:nth-child(3) {
+  min-width: 220px;
+  max-width: 320px;
+  white-space: normal;
 }
 
 .county-table tbody tr:hover {
