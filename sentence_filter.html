@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>County Population Change, 2020–2025 (sentence filter)</title>
+  <link rel="stylesheet" href="sentence_filter.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <main class="county-map-app">
+
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading county boundaries and population data…
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="visualization" class="visualization" hidden>
+      <div class="map-column">
+    <header class="map-header">
+      <h1>
+        Showing
+        <span class="inline-select-wrap">
+          <select id="sign-filter" class="inline-select" aria-label="Filter by direction of change">
+            <option value="all">all change</option>
+            <option value="positive">increase only</option>
+            <option value="negative">decrease only</option>
+          </select>
+          <span id="sign-filter-display" class="inline-select-display" aria-hidden="true">all change</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        in
+        <span class="inline-select-wrap">
+          <select id="group-select" class="inline-select" aria-label="Choose population group"></select>
+          <span id="group-select-display" class="inline-select-display" aria-hidden="true">Total population</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        for
+        <span class="inline-select-wrap">
+          <select id="type-filter" class="inline-select" aria-label="Filter by county type">
+            <option value="all">all county types</option>
+            <option value="large_central_metro">large central metro counties</option>
+            <option value="large_fringe_metro">large fringe metro counties</option>
+            <option value="medium_metro">medium metro counties</option>
+            <option value="small_metro">small metro counties</option>
+            <option value="micropolitan">micropolitan counties</option>
+            <option value="noncore">noncore counties</option>
+          </select>
+          <span id="type-filter-display" class="inline-select-display" aria-hidden="true">all county types</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        between
+        <span class="inline-select-wrap">
+          <select id="start-year" class="inline-select" aria-label="Start year"></select>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        and
+        <span class="inline-select-wrap">
+          <select id="end-year" class="inline-select" aria-label="End year"></select>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+      </h1>
+    </header>
+     <section class="controls-row">
+        <label class="county-search-label" for="county-search-input">
+          <span class="control-label">Search for a county</span>
+          <div class="county-search-input-wrap">
+            <input
+              type="text"
+              id="county-search-input"
+              class="county-search-input"
+              placeholder="e.g. Cook County, Illinois"
+              autocomplete="off"
+              spellcheck="false"
+              role="combobox"
+              aria-expanded="false"
+              aria-controls="county-search-suggestions"
+              aria-autocomplete="list"
+              disabled
+            >
+            <button type="button" id="county-search-clear" class="county-search-clear" hidden aria-label="Clear county search">&times;</button>
+            <ul id="county-search-suggestions" class="county-search-suggestions" role="listbox" hidden></ul>
+          </div>
+        </label>
+
+        <label class="state-select-label" for="state-select">
+          <span class="control-label">Select a state</span>
+          <select id="state-select" aria-label="Select a state">
+            <option value="">All states</option>
+          </select>
+        </label>
+
+        <label class="state-select-label" for="region-select">
+          <span class="control-label">Select a region</span>
+          <select id="region-select" aria-label="Select a region">
+            <option value="">All regions</option>
+          </select>
+        </label>
+        </section>
+    <div class="metric-toggle-row">
+      <div class="toggle-switch" id="metric-controls">
+        <button type="button" class="is-active" data-value="count">Count</button>
+        <span class="toggle-switch-track" aria-hidden="true">
+          <span class="toggle-switch-knob"></span>
+        </span>
+        <button type="button" data-value="percent">Percent</button>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <div class="legend-filter">
+        <div id="legend-label" class="legend-label"></div>
+        <div class="legend-scale">
+          <span id="legend-min" class="legend-edge-label"></span>
+          <div class="legend-bar-wrap">
+            <div id="legend-gradient" class="legend-gradient"></div>
+            <span id="legend-zero-label" class="legend-zero-label">0</span>
+          </div>
+          <span id="legend-max" class="legend-edge-label"></span>
+        </div>
+      </div>
+    </div>
+
+        <div class="map-wrap">
+          <svg
+            id="county-map"
+            viewBox="0 0 975 610"
+            role="img"
+            aria-label="Interactive map of county population change"
+          ></svg>
+          <div id="tooltip" class="tooltip" aria-hidden="true"></div>
+        </div>
+
+
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <section class="county-table-section" aria-labelledby="county-table-title">
+          <div class="county-table-heading">
+            <h2 id="county-table-title">Filtered counties</h2>
+            <div id="county-table-summary" class="county-table-summary"></div>
+          </div>
+          <div class="county-table-wrap">
+            <table class="county-table" id="county-table">
+              <thead>
+                <tr>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="county">County<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="state">State<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="type">County type<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="start"><span id="county-table-start-year">Start</span><span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="end"><span id="county-table-end-year">End</span><span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="change">Count change<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="percent">Percent change<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="county-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="sentence_filter.js"></script>
+</body>
+</html>
