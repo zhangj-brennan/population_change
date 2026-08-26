@@ -107,11 +107,13 @@
     <div class="legend-row">
       <div class="legend-filter">
         <div id="legend-label" class="legend-label"></div>
-        <div id="legend-gradient" class="legend-gradient"></div>
-        <div class="legend-values">
-          <span id="legend-min"></span>
-          <span>0</span>
-          <span id="legend-max"></span>
+        <div class="legend-scale">
+          <span id="legend-min" class="legend-edge-label"></span>
+          <div class="legend-bar-wrap">
+            <div id="legend-gradient" class="legend-gradient"></div>
+            <span id="legend-zero-label" class="legend-zero-label">0</span>
+          </div>
+          <span id="legend-max" class="legend-edge-label"></span>
         </div>
       </div>
     </div>
@@ -123,6 +125,19 @@
           <option value="all">all change</option>
           <option value="positive">increase only</option>
           <option value="negative">decrease only</option>
+        </select>
+        <span class="inline-select-arrow" aria-hidden="true">▾</span>
+      </span>
+      in
+      <span class="inline-select-wrap">
+        <select id="type-filter" class="inline-select" aria-label="Filter by county type">
+          <option value="all">all county types</option>
+          <option value="large_central_metro">large central metro</option>
+          <option value="large_fringe_metro">large fringe metro</option>
+          <option value="medium_metro">medium metro</option>
+          <option value="small_metro">small metro</option>
+          <option value="micropolitan">micropolitan</option>
+          <option value="noncore">noncore</option>
         </select>
         <span class="inline-select-arrow" aria-hidden="true">▾</span>
       </span>

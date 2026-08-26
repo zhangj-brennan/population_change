@@ -1,7 +1,30 @@
 const FILES = {
   population: "data/Vintage 2025 counties race & ethnicity 1.csv",
-  rucc: "data/rural_urban_continuum_codes_2023.csv",
+  urbanRural: "cdc_urban_rural.csv",
   counties: "data/counties_2025_s.geojson"
+};
+
+/*
+  CDC/NCHS 2023 urban-rural classification codes, in order from most
+  urban (1) to most rural (6). Used directly as the county "type"
+  instead of collapsing them into an urban/suburban/rural bucket.
+*/
+const URBAN_RURAL_CODE_TO_SLUG = {
+  1: "large_central_metro",
+  2: "large_fringe_metro",
+  3: "medium_metro",
+  4: "small_metro",
+  5: "micropolitan",
+  6: "noncore"
+};
+
+const URBAN_RURAL_SLUG_TO_LABEL = {
+  large_central_metro: "large central metro",
+  large_fringe_metro: "large fringe metro",
+  medium_metro: "medium metro",
+  small_metro: "small metro",
+  micropolitan: "micropolitan",
+  noncore: "noncore"
 };
 
 /*
@@ -165,7 +188,9 @@ function readURLState() {
   const county = params.get("county");
 
   if (groups.length) appState.groups = groups.includes("total") ? ["total"] : groups;
-  if (["all", "urban", "suburban", "rural"].includes(division)) appState.division = division;
+  if (division === "all" || Object.values(URBAN_RURAL_CODE_TO_SLUG).includes(division)) {
+    appState.division = division;
+  }
   if (["count", "percent"].includes(metric)) appState.metric = metric;
   if (["all", "positive", "negative"].includes(signFilter)) appState.signFilter = signFilter;
   if (Number.isInteger(startYear) && startYear > 0) appState.startYear = startYear;
@@ -240,14 +265,14 @@ loadData();
 
 async function loadData() {
   try {
-    const [geoJSON, populationRows, ruccRows] = await Promise.all([
+    const [geoJSON, populationRows, urbanRuralRows] = await Promise.all([
       d3.json(FILES.counties),
       d3.csv(FILES.population, parsePopulationRow),
-      d3.csv(FILES.rucc)
+      d3.csv(FILES.urbanRural)
     ]);
 
     const population = populationRows.filter(Boolean);
-    const ruccLookup = buildRuccLookup(ruccRows);
+    const urbanRuralLookup = buildUrbanRuralLookup(urbanRuralRows);
 
     availableYears = Array.from(
       new Set(population.map(row => row.year))
@@ -258,7 +283,7 @@ async function loadData() {
     nationalPopulationByYear = buildNationalPopulationByYear(population);
     drawPopulationChart();
 
-    countyRows = buildCountyRecords(population, ruccLookup);
+    countyRows = buildCountyRecords(population, urbanRuralLookup);
     countyByFips = new Map(countyRows.map(row => [row.fips, row]));
     buildCountySearchIndex();
 
@@ -335,32 +360,26 @@ function numeric(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function buildRuccLookup(rows) {
+function buildUrbanRuralLookup(rows) {
   const lookup = new Map();
 
   rows.forEach(row => {
-    const fips = String(row.FIPS).replace(/\.0$/, "").padStart(5, "0");
-    const rucc = Number(row.RUCC_2023);
-    const hasRucc = row.RUCC_2023 !== "" && Number.isFinite(rucc);
+    const fips = String(row.Location).padStart(5, "0");
+    const [codeText, ...labelParts] = String(row["2023 Code"] || "").split(" - ");
+    const code = Number(codeText);
+    const hasCode = Number.isFinite(code) && URBAN_RURAL_CODE_TO_SLUG[code];
 
     lookup.set(fips, {
-      rucc: hasRucc ? rucc : null,
-      division: hasRucc ? divisionFromRucc(rucc) : null,
-      description: row.Description || null
+      code: hasCode ? code : null,
+      division: hasCode ? URBAN_RURAL_CODE_TO_SLUG[code] : null,
+      description: labelParts.length ? labelParts.join(" - ") : null
     });
   });
 
   return lookup;
 }
 
-function divisionFromRucc(rucc) {
-  if (rucc >= 1 && rucc <= 3) return "urban";
-  if (rucc >= 4 && rucc <= 6) return "suburban";
-  if (rucc >= 7 && rucc <= 9) return "rural";
-  return null;
-}
-
-function buildCountyRecords(populationRows, ruccLookup) {
+function buildCountyRecords(populationRows, urbanRuralLookup) {
   const grouped = d3.group(populationRows, row => row.fips);
   const records = [];
 
@@ -372,8 +391,8 @@ function buildCountyRecords(populationRows, ruccLookup) {
       return;
     }
 
-    const rucc = ruccLookup.get(fips) || {
-      rucc: null,
+    const urbanRural = urbanRuralLookup.get(fips) || {
+      code: null,
       division: null,
       description: null
     };
@@ -393,9 +412,9 @@ function buildCountyRecords(populationRows, ruccLookup) {
       stateFips: referenceRow.stateFips,
       stateName: referenceRow.stateName,
       countyName: referenceRow.countyName,
-      rucc: rucc.rucc,
-      division: rucc.division,
-      description: rucc.description,
+      code: urbanRural.code,
+      division: urbanRural.division,
+      description: urbanRural.description,
       values
     });
   });
@@ -564,21 +583,48 @@ function updateSignFilterOptions(geographyRows) {
   Object.entries(counts).forEach(([key, count]) => {
     const option = select.querySelector(`option[value="${key}"]`);
     if (option) {
-      option.textContent = `${labels[key]} (${format(count)} counties)`;
+      option.textContent = key === "all"
+        ? labels[key]
+        : `${labels[key]} (${format(count)} counties)`;
     }
+  });
+}
+
+function updateTypeFilterOptions(regionRows) {
+  const select = document.querySelector("#type-filter");
+  if (!select) return;
+
+  const format = d3.format(",");
+
+  const allOption = select.querySelector(`option[value="all"]`);
+  if (allOption) {
+    allOption.textContent = "all county types";
+  }
+
+  Object.keys(URBAN_RURAL_SLUG_TO_LABEL).forEach(slug => {
+    const option = select.querySelector(`option[value="${slug}"]`);
+    if (!option) return;
+
+    const count = regionRows.filter(row => row.division === slug).length;
+    option.textContent = `${URBAN_RURAL_SLUG_TO_LABEL[slug]} (${format(count)} counties)`;
   });
 }
 
 function updateMap() {
   updateMapTitle();
 
-  const geographyRows = countyRows.filter(row =>
-    (appState.division === "all" || row.division === appState.division) &&
+  const regionRows = countyRows.filter(row =>
     (!appState.selectedState || row.stateFips === appState.selectedState) &&
     (
       !appState.selectedRegion ||
       REGION_STATE_FIPS[appState.selectedRegion].has(row.stateFips)
     )
+  );
+
+  updateTypeFilterOptions(regionRows);
+
+  const geographyRows = regionRows.filter(row =>
+    appState.division === "all" || row.division === appState.division
   );
 
   updateSignFilterOptions(geographyRows);
@@ -638,16 +684,44 @@ const trueExtent = d3.extent(values);
 const filterDomainMin = Math.floor((trueExtent[0] || 0) / filterStep) * filterStep;
 const filterDomainMax = Math.ceil((trueExtent[1] || 0) / filterStep) * filterStep;
 
-const colorScale = d3.scaleDiverging()
-  .domain([-1, 0, 1])
-  .interpolator(
-    d3.interpolateRgbBasis([
-      "#FFCF01",
-      "#ffffff",
-      "#711471"
-    ])
-  )
-  .clamp(true);
+/*
+  Negative and positive sides are interpolated independently (rather than
+  through one continuous diverging scale) so that "approaching zero" never
+  fades past the tint floor below. Only the exact zero value renders
+  lighter than that, via the flat overrides below and in the legend's
+  zero band.
+*/
+const NEGATIVE_COLOR_BASE = "#FFCF01";
+const NEGATIVE_COLOR_DARKEN_TARGET = "#ED1C24";
+const NEGATIVE_DARKEN_MIX = 0.2;
+const NEGATIVE_COLOR_FULL = d3.interpolateRgb(NEGATIVE_COLOR_BASE, NEGATIVE_COLOR_DARKEN_TARGET)(NEGATIVE_DARKEN_MIX);
+const POSITIVE_COLOR_FULL = "#711471";
+const NEGATIVE_TINT_FLOOR_MIX = 0.9;
+const POSITIVE_TINT_FLOOR_MIX = 0.8;
+const NEGATIVE_COLOR_TINT = d3.interpolateRgb(NEGATIVE_COLOR_FULL, "#ffffff")(NEGATIVE_TINT_FLOOR_MIX);
+const POSITIVE_COLOR_TINT = d3.interpolateRgb(POSITIVE_COLOR_FULL, "#ffffff")(POSITIVE_TINT_FLOOR_MIX);
+const negativeColorRamp = d3.interpolateRgb(NEGATIVE_COLOR_TINT, NEGATIVE_COLOR_FULL);
+const positiveColorRamp = d3.interpolateRgb(POSITIVE_COLOR_TINT, POSITIVE_COLOR_FULL);
+
+/*
+  Curve the tint→full-color ramp position (on top of the sqrt already
+  applied to the raw value in colorValue) so modest changes reach a
+  noticeably fuller color quickly, instead of most counties sitting close
+  to the pale tint floor. The yellow side uses a stronger curve (smaller
+  exponent) than the purple side for more contrast.
+*/
+const NEGATIVE_CURVE_EXPONENT = 1 / 4;
+const POSITIVE_CURVE_EXPONENT = 1 / 2;
+
+function colorScale(scaledValue) {
+  if (scaledValue < 0) {
+    return negativeColorRamp(Math.min(1, -scaledValue) ** NEGATIVE_CURVE_EXPONENT);
+  }
+  if (scaledValue > 0) {
+    return positiveColorRamp(Math.min(1, scaledValue) ** POSITIVE_CURVE_EXPONENT);
+  }
+  return "#ffffff";
+}
   countySelection
     .classed("is-filtered", feature => {
       const row = countyByFips.get(featureFips(feature));
@@ -749,10 +823,10 @@ function buildLegendGradient(domainMin, domainMax, colorValue, colorScale) {
     }
   }
 
-  stops.push(`#ffffff ${(bandStart * 100).toFixed(3)}%`);
+  stops.push(`${colorAt(bandStart)} ${(bandStart * 100).toFixed(3)}%`);
   stops.push(`${LEGEND_ZERO_COLOR} ${(bandStart * 100).toFixed(3)}%`);
   stops.push(`${LEGEND_ZERO_COLOR} ${(bandEnd * 100).toFixed(3)}%`);
-  stops.push(`#ffffff ${(bandEnd * 100).toFixed(3)}%`);
+  stops.push(`${colorAt(bandEnd)} ${(bandEnd * 100).toFixed(3)}%`);
 
   for (let index = 0; index <= stopCount; index += 1) {
     const position = index / stopCount;
@@ -776,6 +850,10 @@ function updateLegend(domainMin, domainMax, gradient) {
   document.querySelector("#legend-min").textContent = formatter(domainMin);
   document.querySelector("#legend-max").textContent =
     domainMax > 0 ? `+${formatter(domainMax)}` : formatter(domainMax);
+
+  const span = (domainMax - domainMin) || 1;
+  const zeroFraction = Math.min(1, Math.max(0, (0 - domainMin) / span));
+  document.querySelector("#legend-zero-label").style.left = `${zeroFraction * 100}%`;
 
   document.querySelector("#legend-label").textContent =
     `${selectedPopulationLabel()} · ` +
@@ -951,7 +1029,7 @@ function updateCountyTable() {
   }
 
   body.innerHTML = rows.map(({ row, start, end, change, percent }) => {
-    const divisionLabel = row.description || (row.division ? capitalize(row.division) : "Unclassified");
+    const divisionLabel = row.description || (row.division ? capitalize(row.division.replace(/_/g, " ")) : "Unclassified");
     return `
       <tr>
         <td>${escapeHTML(row.countyName)}</td>
@@ -1021,7 +1099,7 @@ function showTooltip(event, feature) {
       Change: ${signedInteger(change)}<br>
       Percent: ${percent === null ? "N/A" : signedPercent(percent)}<br>
       County type: ${escapeHTML(divisionLabel)}
-      ${row.rucc === null ? "" : ` (RUCC ${row.rucc})`}
+      ${row.code === null ? "" : ` (code ${row.code})`}
     `);
 
   positionTooltip(event);
@@ -1752,6 +1830,13 @@ function wireStaticControls() {
       updateMap();
     });
 
+  const typeFilterSelect = document.querySelector("#type-filter");
+  typeFilterSelect.value = appState.division;
+  typeFilterSelect.addEventListener("change", event => {
+    appState.division = event.target.value;
+    updateMap();
+  });
+
   document.querySelector("#state-select")
     .addEventListener("change", event => {
       const stateFips = event.target.value || null;
@@ -1828,6 +1913,9 @@ window.addEventListener("popstate", () => {
 
   const signFilterSelect = document.querySelector("#sign-filter");
   if (signFilterSelect) signFilterSelect.value = appState.signFilter;
+
+  const typeFilterSelect = document.querySelector("#type-filter");
+  if (typeFilterSelect) typeFilterSelect.value = appState.division;
 
   const searchInput = document.querySelector("#county-search-input");
   const searchClear = document.querySelector("#county-search-clear");
