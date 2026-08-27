@@ -335,7 +335,7 @@ select {
 .state-outline {
   fill: none;
   stroke: #fff;
-  stroke-width: 0.5;
+  stroke-width: 0.8;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
 }

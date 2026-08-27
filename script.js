@@ -1,7 +1,8 @@
 const FILES = {
   population: "data/Vintage 2025 counties race & ethnicity 1.csv",
   urbanRural: "cdc_urban_rural.csv",
-  counties: "data/counties_2025_s.geojson"
+  counties: "data/counties_2025_s.geojson",
+  states: "states.geojson"
 };
 
 /*
@@ -271,8 +272,9 @@ loadData();
 
 async function loadData() {
   try {
-    const [geoJSON, populationRows, urbanRuralRows] = await Promise.all([
+    const [geoJSON, statesGeoJSONData, populationRows, urbanRuralRows] = await Promise.all([
       d3.json(FILES.counties),
+      d3.json(FILES.states),
       d3.csv(FILES.population, parsePopulationRow),
       d3.csv(FILES.urbanRural)
     ]);
@@ -290,7 +292,7 @@ async function loadData() {
     countyByFips = new Map(countyRows.map(row => [row.fips, row]));
     buildCountySearchIndex();
 
-    drawMap(geoJSON);
+    drawMap(geoJSON, statesGeoJSONData);
 
     if (requestedCountyFips && countyByFips.has(requestedCountyFips)) {
       appState.highlightedCountyFips = requestedCountyFips;
@@ -425,7 +427,7 @@ function buildCountyRecords(populationRows, urbanRuralLookup) {
   return records;
 }
 
-function drawMap(geoJSON) {
+function drawMap(geoJSON, statesGeoJSONData) {
   const svg = d3.select("#county-map");
 
   const includedFeatures = geoJSON.features.filter(feature => {
@@ -440,17 +442,8 @@ function drawMap(geoJSON) {
 
   statesGeoJSON = {
     type: "FeatureCollection",
-    features: Array.from(
-      d3.group(includedFeatures, feature =>
-        String(feature.properties.STATEFP).padStart(2, "0")
-      ),
-      ([stateFips, features]) => ({
-        type: "Feature",
-        properties: {
-          STATEFP: stateFips
-        },
-        geometry: mergeStateGeometry(features)
-      })
+    features: statesGeoJSONData.features.filter(feature =>
+      String(feature.properties.STATEFP).padStart(2, "0") !== "72"
     )
   };
 
@@ -481,26 +474,6 @@ function drawMap(geoJSON) {
     .attr("class", "state-outline")
     .attr("d", path);
 }
-
-function mergeStateGeometry(features) {
-  const polygons = [];
-
-  features.forEach(feature => {
-    if (!feature.geometry) return;
-
-    if (feature.geometry.type === "Polygon") {
-      polygons.push(feature.geometry.coordinates);
-    } else if (feature.geometry.type === "MultiPolygon") {
-      feature.geometry.coordinates.forEach(polygon => polygons.push(polygon));
-    }
-  });
-
-  return {
-    type: "MultiPolygon",
-    coordinates: polygons
-  };
-}
-
 
 function selectedPopulationValue(row, year) {
   if (!row) return null;
