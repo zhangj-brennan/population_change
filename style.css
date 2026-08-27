@@ -73,6 +73,18 @@ select {
   color: #111;
 }
 
+/*
+  The title-break <br> tags force the sentence onto 4 lines so each clause
+  reads clearly, but on wide screens there's enough horizontal room to
+  flow it as one wrapping block instead — worth doing since vertical
+  space above the map is at a premium.
+*/
+@media (min-width: 851px) {
+  .title-break {
+    display: none;
+  }
+}
+
 .map-header h1 .inline-select {
   font-size: inherit;
 }
@@ -310,9 +322,7 @@ select {
   stroke: #fff;
   stroke-width: 0.2;
   vector-effect: non-scaling-stroke;
-  transition:
-    fill 180ms ease,
-    opacity 180ms ease;
+  transition: fill 180ms ease;
 }
 
 .county.is-filtered {

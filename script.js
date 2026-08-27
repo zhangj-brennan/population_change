@@ -503,27 +503,54 @@ function selectedPopulationLabel() {
     .join(" + ");
 }
 
+/*
+  updateMap() calls valueForCounty on every county several times over per
+  render (once to build eligibleRows, again in the fill/is-filtered
+  callbacks, again in the table build, and repeatedly per comparison
+  during the table's default sort) — for ~3,100 counties that adds up to
+  tens of thousands of redundant recomputations of the same number per
+  keystroke. The result only depends on startYear/endYear/metric/groups,
+  none of which change mid-render, so it's cached per row and invalidated
+  only when one of those actually changes.
+*/
+let valueForCountyCache = new WeakMap();
+let valueForCountyCacheKey = null;
+
 function valueForCounty(row) {
   if (!row) return null;
+
+  const cacheKey = `${appState.startYear}|${appState.endYear}|${appState.metric}|${appState.groups.join(",")}`;
+
+  if (cacheKey !== valueForCountyCacheKey) {
+    valueForCountyCache = new WeakMap();
+    valueForCountyCacheKey = cacheKey;
+  }
+
+  if (valueForCountyCache.has(row)) {
+    return valueForCountyCache.get(row);
+  }
 
   const start = selectedPopulationValue(row, appState.startYear);
   const end = selectedPopulationValue(row, appState.endYear);
 
+  let result;
+
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return null;
+    result = null;
+  } else {
+    const change = end - start;
+
+    if (appState.metric === "count") {
+      result = change;
+    } else if (start === 0) {
+      result = null;
+    } else {
+      result = (change / start) * 100;
+    }
   }
 
-  const change = end - start;
-
-  if (appState.metric === "count") {
-    return change;
-  }
-
-  if (start === 0) {
-    return null;
-  }
-
-  return (change / start) * 100;
+  valueForCountyCache.set(row, result);
+  return result;
 }
 
 function matchesSignFilter(value) {
@@ -584,7 +611,25 @@ function syncInlineSelectDisplay(select, displayId, labels) {
   if (display) display.textContent = labels[select.value] || select.value;
 }
 
-function updateMap() {
+function isCountyDimmed(feature) {
+  const stateFips = featureStateFips(feature);
+
+  if (appState.selectedState) {
+    return stateFips !== appState.selectedState;
+  }
+
+  if (appState.selectedRegion) {
+    return !REGION_STATE_FIPS[appState.selectedRegion].has(stateFips);
+  }
+
+  return false;
+}
+
+function applyCountyDimming() {
+  countySelection.classed("is-dimmed", isCountyDimmed);
+}
+
+function updateMap({ deferDimming = false } = {}) {
   updateMapTitle();
 
   const regionRows = countyRows.filter(row =>
@@ -710,20 +755,22 @@ function colorScale(scaledValue) {
           row.division !== appState.division
         ) ||
         !matchesSignFilter(valueForCounty(row));
-    })
-    .classed("is-dimmed", feature => {
-      const stateFips = featureStateFips(feature);
+    });
 
-      if (appState.selectedState) {
-        return stateFips !== appState.selectedState;
-      }
+  if (!deferDimming) {
+    applyCountyDimming();
+  }
 
-      if (appState.selectedRegion) {
-        return !REGION_STATE_FIPS[appState.selectedRegion].has(stateFips);
-      }
-
-      return false;
-    })
+  /*
+    Dimmed counties fade to 8% opacity, so recomputing and CSS-animating
+    their fill color on every render is wasted work that's barely visible
+    anyway — skipping them (leaving whatever fill they already had) cuts
+    the DOM writes and concurrent fill/opacity transitions roughly by
+    however much of the map is outside the current state/region
+    selection, which is the main source of lag when selecting a state.
+  */
+  countySelection
+    .filter(feature => !isCountyDimmed(feature))
     .attr("fill", feature => {
       const row = countyByFips.get(featureFips(feature));
 
@@ -739,11 +786,12 @@ function colorScale(scaledValue) {
       if (!matchesSignFilter(valueForCounty(row))) {
         return "#ededed";
       }
-const value = valueForCounty(row);
-const scaledValue = colorValue(value);
 
-if (scaledValue === null) return "#d9d9d9";
-return colorScale(scaledValue);
+      const value = valueForCounty(row);
+      const scaledValue = colorValue(value);
+
+      if (scaledValue === null) return "#d9d9d9";
+      return colorScale(scaledValue);
     });
 
 const highlightedFeature = appState.highlightedCountyFips
@@ -1090,6 +1138,14 @@ function hideTooltip() {
     .attr("aria-hidden", "true");
 }
 
+/*
+  Zooming in and dimming everything outside the selection at the same
+  time asks the browser to animate the pan/zoom transform and fade ~3,000
+  counties' opacity simultaneously. Sequencing them instead — zoom first,
+  then fade once the camera has settled — halves the concurrent work and
+  reads more intentionally besides. Clearing a selection (stateFips/
+  regionKey falsy) has nothing new to dim, so it isn't deferred.
+*/
 function selectState(stateFips) {
   appState.selectedState = stateFips;
 
@@ -1098,7 +1154,11 @@ function selectState(stateFips) {
   }
 
   zoomToStateFips(stateFips ? [stateFips] : []);
-  updateMap();
+  updateMap({ deferDimming: Boolean(stateFips) });
+
+  if (stateFips) {
+    setTimeout(applyCountyDimming, ZOOM_TRANSITION_DURATION_MS);
+  }
 }
 
 function selectRegion(regionKey) {
@@ -1116,22 +1176,24 @@ function selectRegion(regionKey) {
   updateMap();
 }
 
+const ZOOM_TRANSITION_DURATION_MS = 650;
+
 function zoomToStateFips(stateFipsList) {
   if (!stateFipsList.length) {
     countyLayer
       .transition()
       .duration(550)
-      .attr("transform", null);
+      .style("transform", null);
 
     stateLayer
       .transition()
       .duration(550)
-      .attr("transform", null);
+      .style("transform", null);
 
     highlightLayer
       .transition()
       .duration(550)
-      .attr("transform", null);
+      .style("transform", null);
 
     return;
   }
@@ -1160,25 +1222,31 @@ function zoomToStateFips(stateFipsList) {
     Math.min(8, 0.82 / Math.max(dx / 975, dy / 610))
   );
 
+  /*
+    Unlike the SVG "transform" attribute, the CSS transform property (used
+    below via .style() so the browser can composite the pan/zoom on the
+    GPU) requires unit'd lengths for translate — DOMMatrix throws on bare
+    numbers.
+  */
   const transform =
-    `translate(${975 / 2},${610 / 2}) ` +
+    `translate(${975 / 2}px,${610 / 2}px) ` +
     `scale(${scale}) ` +
-    `translate(${-x},${-y})`;
+    `translate(${-x}px,${-y}px)`;
 
   countyLayer
     .transition()
-    .duration(650)
-    .attr("transform", transform);
+    .duration(ZOOM_TRANSITION_DURATION_MS)
+    .style("transform", transform);
 
   stateLayer
     .transition()
-    .duration(650)
-    .attr("transform", transform);
+    .duration(ZOOM_TRANSITION_DURATION_MS)
+    .style("transform", transform);
 
   highlightLayer
     .transition()
-    .duration(650)
-    .attr("transform", transform);
+    .duration(ZOOM_TRANSITION_DURATION_MS)
+    .style("transform", transform);
 }
 
 function buildCountySearchIndex() {
