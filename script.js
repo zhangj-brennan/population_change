@@ -283,6 +283,7 @@ wireCountySearch();
 wireCountyTableSorting();
 wireCountyTableToggle();
 updateCountyTableVisibility();
+wireTooltipClose();
 loadData();
 
 async function loadData() {
@@ -1162,8 +1163,9 @@ function showTooltip(event, feature) {
 
   tooltip
     .style("opacity", 1)
-    .attr("aria-hidden", "false")
-    .html(`
+    .attr("aria-hidden", "false");
+
+  tooltip.select("#tooltip-content").html(`
       <strong>${escapeHTML(row.countyName)}, ${escapeHTML(row.stateName)}</strong><br>
       Selected race groups: ${escapeHTML(selectedPopulationLabel())}<br>
       ${appState.startYear}: ${d3.format(",")(start)}<br>
@@ -1205,6 +1207,23 @@ function hideTooltip() {
   tooltip
     .style("opacity", 0)
     .attr("aria-hidden", "true");
+}
+
+/*
+  Counties only get a "mousemove" listener, not "click"/"touch" — on
+  touch devices a tap fires mousemove without any equivalent to
+  mouseleave, so the tooltip has no way to dismiss itself once opened.
+  The close button (visible on narrow/touch-sized screens only) gives
+  mobile users an explicit way out.
+*/
+function wireTooltipClose() {
+  const button = document.querySelector("#tooltip-close");
+  if (!button) return;
+
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    hideTooltip();
+  });
 }
 
 /*

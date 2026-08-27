@@ -318,6 +318,22 @@ select {
   opacity: 0;
 }
 
+.tooltip-close {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  color: #111;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
 #county-map {
   display: block;
   width: 100%;
@@ -357,20 +373,6 @@ select {
   stroke-width: 0.8;
   pointer-events: none;
   vector-effect: non-scaling-stroke;
-}
-
-.tooltip {
-  position: absolute;
-  z-index: 50;
-  max-width: 270px;
-  padding: 9px 11px;
-  border: 1px solid #000;
-  color: #111;
-  background: rgba(255, 255, 255, 0.98);
-  font-size: 12px;
-  line-height: 1.45;
-  pointer-events: none;
-  opacity: 0;
 }
 
 .tooltip strong {
@@ -596,6 +598,14 @@ select {
 
   .controls-row {
     grid-template-columns: 1fr;
+  }
+
+  .tooltip-close {
+    display: block;
+  }
+
+  #tooltip-content {
+    padding-right: 20px;
   }
 }
 
