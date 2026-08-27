@@ -301,9 +301,22 @@ async function loadData() {
         `${row.countyName}, ${row.stateName}`;
       appState.selectedState = row.stateFips;
       appState.selectedRegion = null;
-      zoomToStateFips([row.stateFips]);
     }
 
+    /*
+      A persisted ?state=/?region= URL (with no county) sets
+      appState.selectedState/selectedRegion during readURLState(), but
+      without this the map only reflected that in coloring/dimming on
+      load — it never actually panned/zoomed there, so a refresh showed
+      the whole country instead of the selected geography.
+    */
+    const initialStateFipsList = appState.selectedState
+      ? [appState.selectedState]
+      : appState.selectedRegion
+        ? Array.from(REGION_STATE_FIPS[appState.selectedRegion])
+        : [];
+
+    zoomToStateFips(initialStateFipsList);
     updateMap();
     updateStateDropdown();
     updateRegionDropdown();
@@ -648,11 +661,20 @@ function updateMap({ deferDimming = false } = {}) {
 
   updateSignFilterOptions(geographyRows);
 
-  const eligibleRows = geographyRows.filter(row =>
+  /*
+    The color scale's min/max are deliberately scoped to state/region and
+    sign, but NOT to the county-type filter — otherwise switching type
+    (e.g. to "noncore counties") would rescale the ramp to that type's own
+    min/max and recolor every county on the map, the same "everything
+    recolors" issue selecting a state used to cause. Counties outside the
+    selected type still grey out via is-filtered as before; this only
+    keeps the color scale itself stable when that filter changes.
+  */
+  const colorScaleRows = regionRows.filter(row =>
     matchesSignFilter(valueForCounty(row))
   );
 
-  const values = eligibleRows
+  const values = colorScaleRows
     .map(valueForCounty)
     .filter(Number.isFinite);
 
