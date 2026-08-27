@@ -262,6 +262,7 @@ const tooltip = d3.select("#tooltip");
 let countyRows = [];
 let countyByFips = new Map();
 let countySelection;
+let hasPaintedCountyFillOnce = false;
 let countyLayer;
 let stateLayer;
 let highlightLayer;
@@ -806,9 +807,18 @@ function colorScale(scaledValue) {
     the DOM writes and concurrent fill/opacity transitions roughly by
     however much of the map is outside the current state/region
     selection, which is the main source of lag when selecting a state.
+    This only holds once every county has been painted at least once,
+    though: on the very first render (e.g. loading a ?state= URL
+    directly), a dimmed county has no prior fill to fall back on, so
+    skipping it would leave the path with no fill at all (SVG defaults
+    to black) instead of a faded real color.
   */
-  countySelection
-    .filter(feature => !isCountyDimmed(feature))
+  const countiesToFill = hasPaintedCountyFillOnce
+    ? countySelection.filter(feature => !isCountyDimmed(feature))
+    : countySelection;
+  hasPaintedCountyFillOnce = true;
+
+  countiesToFill
     .attr("fill", feature => {
       const row = countyByFips.get(featureFips(feature));
 
@@ -1227,12 +1237,17 @@ function wireTooltipClose() {
 }
 
 /*
-  Zooming in and dimming everything outside the selection at the same
-  time asks the browser to animate the pan/zoom transform and fade ~3,000
-  counties' opacity simultaneously. Sequencing them instead — zoom first,
-  then fade once the camera has settled — halves the concurrent work and
-  reads more intentionally besides. Clearing a selection (stateFips/
-  regionKey falsy) has nothing new to dim, so it isn't deferred.
+  Zooming IN scopes the color scale to just the selected state, so the
+  "reveal everything outside it" work (fill + dimming) is cheap and can
+  run immediately while only the fade-in is deferred past the pan/zoom
+  animation. Zooming back OUT is the opposite: the color scale reverts to
+  the full nationwide range, so *every* county needs a fresh fill — doing
+  that at the same moment as the pan/zoom transform was the actual source
+  of the jerkiness, not just the dimming fade. So going back to "all
+  states" defers the whole updateMap() call instead of just the dimming
+  step, keeping the map visually static (whatever it already showed)
+  until the zoom-out animation has finished, then updating everything at
+  once.
 */
 function selectState(stateFips) {
   appState.selectedState = stateFips;
@@ -1242,10 +1257,12 @@ function selectState(stateFips) {
   }
 
   zoomToStateFips(stateFips ? [stateFips] : []);
-  updateMap({ deferDimming: Boolean(stateFips) });
 
   if (stateFips) {
+    updateMap({ deferDimming: true });
     setTimeout(applyCountyDimming, ZOOM_TRANSITION_DURATION_MS);
+  } else {
+    setTimeout(updateMap, ZOOM_RESET_DURATION_MS);
   }
 }
 
@@ -1261,30 +1278,33 @@ function selectRegion(regionKey) {
     : [];
 
   zoomToStateFips(stateFipsList);
-  updateMap({ deferDimming: Boolean(regionKey) });
 
   if (regionKey) {
+    updateMap({ deferDimming: true });
     setTimeout(applyCountyDimming, ZOOM_TRANSITION_DURATION_MS);
+  } else {
+    setTimeout(updateMap, ZOOM_RESET_DURATION_MS);
   }
 }
 
 const ZOOM_TRANSITION_DURATION_MS = 650;
+const ZOOM_RESET_DURATION_MS = 550;
 
 function zoomToStateFips(stateFipsList) {
   if (!stateFipsList.length) {
     countyLayer
       .transition()
-      .duration(550)
+      .duration(ZOOM_RESET_DURATION_MS)
       .style("transform", null);
 
     stateLayer
       .transition()
-      .duration(550)
+      .duration(ZOOM_RESET_DURATION_MS)
       .style("transform", null);
 
     highlightLayer
       .transition()
-      .duration(550)
+      .duration(ZOOM_RESET_DURATION_MS)
       .style("transform", null);
 
     return;
