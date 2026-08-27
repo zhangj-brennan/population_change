@@ -97,8 +97,8 @@ select {
 }
 
 .control-label {
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom: 2px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -322,7 +322,9 @@ select {
   stroke: #fff;
   stroke-width: 0.2;
   vector-effect: non-scaling-stroke;
-  transition: fill 180ms ease;
+  transition:
+    fill 180ms ease,
+    opacity 180ms ease;
 }
 
 .county.is-filtered {
@@ -433,7 +435,7 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
-  margin-top: 22px;
+  margin-top: 14px;
 }
 
 .county-search-label {

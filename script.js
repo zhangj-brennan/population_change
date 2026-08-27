@@ -1173,7 +1173,11 @@ function selectRegion(regionKey) {
     : [];
 
   zoomToStateFips(stateFipsList);
-  updateMap();
+  updateMap({ deferDimming: Boolean(regionKey) });
+
+  if (regionKey) {
+    setTimeout(applyCountyDimming, ZOOM_TRANSITION_DURATION_MS);
+  }
 }
 
 const ZOOM_TRANSITION_DURATION_MS = 650;
