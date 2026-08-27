@@ -1,8 +1,8 @@
 const FILES = {
   population: "data/Vintage 2025 counties race & ethnicity 1.csv",
   urbanRural: "cdc_urban_rural.csv",
-  counties: "data/counties_2025_s.geojson",
-  states: "states.geojson"
+  counties: "counties_2025_5mScale.geojson",
+  states: "states_2025_5mScale.geojson"
 };
 
 /*
@@ -178,8 +178,20 @@ const appState = {
   selectedRegion: null,
   highlightedCountyFips: null,
   tableSort: null,
-  signFilter: "all"
+  signFilter: "all",
+  tableVisible: false
 };
+
+/*
+  "No filter" = every filter is at its default, all-inclusive value —
+  used to decide whether the county table starts open or collapsed.
+*/
+function hasActiveFilter() {
+  return appState.signFilter !== "all" ||
+    appState.division !== "all" ||
+    Boolean(appState.selectedState) ||
+    Boolean(appState.selectedRegion);
+}
 
 let requestedCountyFips = null;
 
@@ -262,12 +274,15 @@ let countySearchResults = [];
 let countySearchActiveIndex = -1;
 
 readURLState();
+appState.tableVisible = hasActiveFilter();
 buildGroupDropdown();
 buildStateDropdown();
 buildRegionDropdown();
 wireStaticControls();
 wireCountySearch();
 wireCountyTableSorting();
+wireCountyTableToggle();
+updateCountyTableVisibility();
 loadData();
 
 async function loadData() {
@@ -1019,30 +1034,62 @@ function wireCountyTableSorting() {
   });
 }
 
+function wireCountyTableToggle() {
+  const button = document.querySelector("#county-table-toggle");
+  if (!button) return;
+
+  button.addEventListener("click", () => {
+    appState.tableVisible = !appState.tableVisible;
+    updateCountyTableVisibility();
+
+    if (appState.tableVisible) {
+      updateCountyTable();
+    }
+  });
+}
+
+function updateCountyTableVisibility() {
+  const wrap = document.querySelector("#county-table-wrap");
+  const button = document.querySelector("#county-table-toggle");
+
+  if (wrap) wrap.hidden = !appState.tableVisible;
+
+  if (button) {
+    button.textContent = appState.tableVisible ? "Hide table" : "Show table";
+    button.setAttribute("aria-expanded", String(appState.tableVisible));
+  }
+}
+
 function updateCountyTable() {
   const body = document.querySelector("#county-table-body");
-  const summary = document.querySelector("#county-table-summary");
-  if (!body || !summary) return;
+  if (!body) return;
 
-  const rows = sortCountyTableRows(
-    countyRows
-      .filter(countyPassesActiveFilters)
-      .map(row => {
-        const start = selectedPopulationValue(row, appState.startYear);
-        const end = selectedPopulationValue(row, appState.endYear);
-        const change = end - start;
-        const percent = start === 0 ? null : (change / start) * 100;
-        return { row, start, end, change, percent };
-      })
-  );
-
-  updateCountyTableSortIndicators();
+  /*
+    Sorting and rendering up to ~3,100 rows on every filter/sort change is
+    real work that's wasted while the table is collapsed and nothing is
+    visible yet — skip it until the table is actually shown
+    (wireCountyTableToggle re-runs this in full the moment it's opened).
+  */
+  if (!appState.tableVisible) {
+    return;
+  }
 
   document.querySelector("#county-table-start-year").textContent = appState.startYear;
   document.querySelector("#county-table-end-year").textContent = appState.endYear;
 
-  summary.textContent =
-    `${d3.format(",")(rows.length)} counties · ${selectedPopulationLabel()}`;
+  const matchingRows = countyRows.filter(countyPassesActiveFilters);
+
+  const rows = sortCountyTableRows(
+    matchingRows.map(row => {
+      const start = selectedPopulationValue(row, appState.startYear);
+      const end = selectedPopulationValue(row, appState.endYear);
+      const change = end - start;
+      const percent = start === 0 ? null : (change / start) * 100;
+      return { row, start, end, change, percent };
+    })
+  );
+
+  updateCountyTableSortIndicators();
 
   if (!rows.length) {
     body.innerHTML = `
@@ -1080,7 +1127,7 @@ function updateStatus() {
     geographyLabel = REGIONS[appState.selectedRegion].label;
   }
 
-  document.querySelector("#status").textContent =
+  document.querySelector("#status-text").textContent =
     `${d3.format(",")(shownCount)} counties shown · ${geographyLabel}`;
 }
 

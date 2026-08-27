@@ -109,9 +109,7 @@
         </span>
         <button type="button" data-value="percent">Percent</button>
       </div>
-    </div>
 
-    <div class="legend-row">
       <div class="legend-filter">
         <div id="legend-label" class="legend-label"></div>
         <div class="legend-scale">
@@ -136,14 +134,13 @@
         </div>
 
 
-        <div id="status" class="status" aria-live="polite"></div>
+        <div id="status" class="status">
+          <span id="status-text" aria-live="polite"></span>
+          <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="county-table-wrap">Show table</button>
+        </div>
 
-        <section class="county-table-section" aria-labelledby="county-table-title">
-          <div class="county-table-heading">
-            <h2 id="county-table-title">Filtered counties</h2>
-            <div id="county-table-summary" class="county-table-summary"></div>
-          </div>
-          <div class="county-table-wrap">
+        <section class="county-table-section" aria-label="Filtered counties">
+          <div class="county-table-wrap" id="county-table-wrap" hidden>
             <table class="county-table" id="county-table">
               <thead>
                 <tr>
