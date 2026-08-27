@@ -19,28 +19,12 @@ const URBAN_RURAL_CODE_TO_SLUG = {
 };
 
 const URBAN_RURAL_SLUG_TO_LABEL = {
-  large_central_metro: "large central metro counties",
-  large_fringe_metro: "large fringe metro counties",
-  medium_metro: "medium metro counties",
-  small_metro: "small metro counties",
-  micropolitan: "micropolitan counties",
-  noncore: "noncore counties"
-};
-
-/*
-  Plain labels (no county counts) for the sentence's closed-select display.
-  The <select> itself keeps count-suffixed option text for the open
-  dropdown list; these back the overlay span shown when it's collapsed.
-*/
-const SIGN_FILTER_LABELS = {
-  all: "all change",
-  positive: "increase only",
-  negative: "decrease only"
-};
-
-const TYPE_FILTER_LABELS = {
-  all: "all county types",
-  ...URBAN_RURAL_SLUG_TO_LABEL
+  large_central_metro: "large central metro",
+  large_fringe_metro: "large fringe metro",
+  medium_metro: "medium metro",
+  small_metro: "small metro",
+  micropolitan: "micropolitan",
+  noncore: "noncore"
 };
 
 /*
@@ -96,9 +80,16 @@ const GROUPS = {
   }
 };
 
-const GROUP_LABELS = Object.fromEntries(
-  Object.entries(GROUPS).map(([groupKey, group]) => [groupKey, group.label])
-);
+const GROUP_COLORS = {
+  total: "#111111",
+  white: "#f23c3f",
+  latino: "#e8ca0d",
+  black: "#00b6f1",
+  asian: "#32ef94",
+  native: "#ff7fe9",
+  pacific: "#c7a37c"
+};
+
 
 const STATE_FIPS_TO_ABBR = {
   "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO",
@@ -256,12 +247,15 @@ let featuresByFips = new Map();
 let path;
 let statesGeoJSON;
 let availableYears = [];
+let nationalPopulationByYear = new Map();
+let populationChartLineSelection;
+let populationChartKeySelection;
 let countySearchIndex = [];
 let countySearchResults = [];
 let countySearchActiveIndex = -1;
 
 readURLState();
-buildGroupDropdown();
+buildPopulationChartKey();
 buildStateDropdown();
 buildRegionDropdown();
 wireStaticControls();
@@ -285,6 +279,9 @@ async function loadData() {
     ).sort(d3.ascending);
 
     populateYearControls();
+
+    nationalPopulationByYear = buildNationalPopulationByYear(population);
+    drawPopulationChart();
 
     countyRows = buildCountyRecords(population, urbanRuralLookup);
     countyByFips = new Map(countyRows.map(row => [row.fips, row]));
@@ -323,7 +320,7 @@ async function loadData() {
       <strong>The map could not load its data files.</strong><br>
       ${escapeHTML(error.message)}<br><br>
       Because the page imports CSV and GeoJSON files, open it through a local web
-      server rather than double-clicking <code>sentence_filter.html</code>. For example:
+      server rather than double-clicking <code>index_old.html</code>. For example:
       <code>python3 -m http.server</code>
     `;
   }
@@ -501,7 +498,6 @@ function mergeStateGeometry(features) {
   };
 }
 
-
 function selectedPopulationValue(row, year) {
   if (!row) return null;
 
@@ -527,6 +523,12 @@ function selectedPopulationLabel() {
 
   return appState.groups
     .map(groupKey => GROUPS[groupKey].label)
+    .join(" + ");
+}
+
+function selectedPopulationTitleLabel() {
+  return appState.groups
+    .map(groupKey => groupKey === "total" ? "Total" : GROUPS[groupKey].label)
     .join(" + ");
 }
 
@@ -572,16 +574,20 @@ function updateSignFilterOptions(geographyRows) {
     negative: values.filter(value => value < 0).length
   };
 
+  const labels = {
+    all: "all change",
+    positive: "increase only",
+    negative: "decrease only"
+  };
+
   Object.entries(counts).forEach(([key, count]) => {
     const option = select.querySelector(`option[value="${key}"]`);
     if (option) {
       option.textContent = key === "all"
-        ? SIGN_FILTER_LABELS[key]
-        : `${SIGN_FILTER_LABELS[key]} (${format(count)} counties)`;
+        ? labels[key]
+        : `${labels[key]} (${format(count)} counties)`;
     }
   });
-
-  syncInlineSelectDisplay(select, "sign-filter-display", SIGN_FILTER_LABELS);
 }
 
 function updateTypeFilterOptions(regionRows) {
@@ -600,15 +606,8 @@ function updateTypeFilterOptions(regionRows) {
     if (!option) return;
 
     const count = regionRows.filter(row => row.division === slug).length;
-    option.textContent = `${URBAN_RURAL_SLUG_TO_LABEL[slug]} (${format(count)})`;
+    option.textContent = `${URBAN_RURAL_SLUG_TO_LABEL[slug]} (${format(count)} counties)`;
   });
-
-  syncInlineSelectDisplay(select, "type-filter-display", TYPE_FILTER_LABELS);
-}
-
-function syncInlineSelectDisplay(select, displayId, labels) {
-  const display = document.querySelector(`#${displayId}`);
-  if (display) display.textContent = labels[select.value] || select.value;
 }
 
 function updateMap() {
@@ -788,6 +787,7 @@ const legendGradient = buildLegendGradient(
 );
 
 updateLegend(filterDomainMin, filterDomainMax, legendGradient);
+  updatePopulationChartSelection();
   updateStateDropdown();
   updateRegionDropdown();
   updateStatus();
@@ -1402,15 +1402,295 @@ function wireCountySearch() {
   });
 }
 
-function buildGroupDropdown() {
-  const select = document.querySelector("#group-select");
+function buildNationalPopulationByYear(populationRows) {
+  const totals = new Map();
 
-  Object.entries(GROUPS).forEach(([groupKey, group]) => {
-    select.add(new Option(group.label, groupKey));
+  availableYears.forEach(year => {
+    const yearRows = populationRows.filter(row => row.year === year);
+    const values = {};
+
+    Object.keys(GROUPS).forEach(groupKey => {
+      values[groupKey] = d3.sum(
+        yearRows,
+        row => row.values[groupKey]
+      );
+    });
+
+    totals.set(year, values);
   });
 
-  select.value = appState.groups[0] || "total";
-  syncInlineSelectDisplay(select, "group-select-display", GROUP_LABELS);
+  return totals;
+}
+
+function populationChangeValue(groupKey, year) {
+  const baselineYear = availableYears[0];
+  const baseline = nationalPopulationByYear.get(baselineYear)?.[groupKey];
+  const value = nationalPopulationByYear.get(year)?.[groupKey];
+
+  if (!Number.isFinite(baseline) || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (appState.metric === "percent") {
+    if (baseline === 0) return null;
+    return ((value - baseline) / baseline) * 100;
+  }
+
+  return value - baseline;
+}
+
+function buildPopulationChartKey() {
+  const key = d3.select("#population-chart-key");
+
+  Object.entries(GROUPS).forEach(([groupKey, group]) => {
+    const label = key
+      .append("label")
+      .attr("class", "population-chart-key-option")
+      .style("--line-color", GROUP_COLORS[groupKey]);
+
+    label
+      .append("input")
+      .attr("type", "checkbox")
+      .attr("value", groupKey)
+      .property("checked", appState.groups.includes(groupKey))
+      .on("change", function() {
+        selectPopulationGroup(groupKey, this.checked);
+      });
+
+    label
+      .append("span")
+      .attr("class", "population-chart-key-label")
+      .text(group.label);
+  });
+
+  populationChartKeySelection = key.selectAll("input");
+}
+
+function drawPopulationChart() {
+  const svg = d3.select("#population-chart");
+  svg.selectAll("*").remove();
+
+  svg.attr(
+    "aria-label",
+    appState.metric === "percent"
+      ? "Percent population change by race and ethnicity for the United States"
+      : "Population count change by race and ethnicity for the United States"
+  );
+
+  const width = 280;
+  const height = 210;
+  const margin = {
+    top: 10,
+    right: 12,
+    bottom: 28,
+    left: appState.metric === "percent" ? 38 : 52
+  };
+
+  const axisValueFormat = appState.metric === "percent"
+    ? value => `${d3.format(".1f")(value)}%`
+    : value => d3.format(",.0f")(value);
+
+  const series = Object.keys(GROUPS).map(groupKey => ({
+    groupKey,
+    values: availableYears.map(year => ({
+      year,
+      value: populationChangeValue(groupKey, year)
+    }))
+  }));
+
+  const allValues = series
+    .flatMap(group => group.values.map(point => point.value))
+    .filter(Number.isFinite);
+
+  const yExtent = d3.extent(allValues);
+  const yPadding = Math.max(
+    0.5,
+    ((yExtent[1] || 0) - (yExtent[0] || 0)) * 0.12
+  );
+
+  const x = d3.scalePoint()
+    .domain(availableYears)
+    .range([margin.left, width - margin.right]);
+
+  const y = d3.scaleLinear()
+    .domain([
+      Math.min(0, (yExtent[0] || 0) - yPadding),
+      Math.max(0, (yExtent[1] || 0) + yPadding)
+    ])
+    .nice()
+    .range([height - margin.bottom, margin.top]);
+
+  const line = d3.line()
+    .defined(point => Number.isFinite(point.value))
+    .x(point => x(point.year))
+    .y(point => y(point.value));
+
+  svg.append("g")
+    .attr("class", "population-chart-grid")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(
+      d3.axisLeft(y)
+        .ticks(5)
+        .tickSize(-(width - margin.left - margin.right))
+        .tickFormat("")
+    );
+
+  svg.append("g")
+    .attr("class", "population-chart-axis")
+    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(
+      d3.axisBottom(x)
+        .tickFormat(d3.format("d"))
+    );
+
+  svg.append("g")
+    .attr("class", "population-chart-axis")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(
+      d3.axisLeft(y)
+        .ticks(5)
+        .tickFormat(axisValueFormat)
+    );
+
+  const zeroY = y(0);
+
+  svg.append("line")
+    .attr("x1", margin.left)
+    .attr("x2", width - margin.right)
+    .attr("y1", zeroY)
+    .attr("y2", zeroY)
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.8);
+
+  populationChartLineSelection = svg.append("g")
+    .selectAll("path")
+    .data(series)
+    .join("path")
+    .attr("class", "population-line")
+    .attr("data-group", group => group.groupKey)
+    .attr("stroke", group => GROUP_COLORS[group.groupKey])
+    .attr("d", group => line(group.values))
+    .on("click", (_, group) => togglePopulationGroup(group.groupKey))
+    .on("mousemove", showPopulationChartTooltip)
+    .on("mouseleave", hidePopulationChartTooltip);
+
+  svg.append("g")
+    .selectAll("g")
+    .data(series)
+    .join("g")
+    .each(function(group) {
+      d3.select(this)
+        .selectAll("circle")
+        .data(group.values.filter(point => Number.isFinite(point.value)))
+        .join("circle")
+        .attr("class", "population-chart-dot")
+        .attr("cx", point => x(point.year))
+        .attr("cy", point => y(point.value))
+        .attr("r", 1.8)
+        .attr("fill", GROUP_COLORS[group.groupKey]);
+    });
+
+  updatePopulationChartSelection();
+}
+
+function togglePopulationGroup(groupKey) {
+  const isSelected = appState.groups.includes(groupKey);
+  selectPopulationGroup(groupKey, !isSelected);
+}
+
+function selectPopulationGroup(groupKey, checked) {
+  if (groupKey === "total") {
+    if (checked) {
+      appState.groups = ["total"];
+    } else if (appState.groups.length === 1) {
+      return;
+    }
+  } else if (checked) {
+    appState.groups = appState.groups
+      .filter(key => key !== "total");
+
+    if (!appState.groups.includes(groupKey)) {
+      appState.groups.push(groupKey);
+    }
+  } else {
+    appState.groups = appState.groups
+      .filter(key => key !== groupKey);
+
+    if (!appState.groups.length) {
+      appState.groups = ["total"];
+    }
+  }
+
+  updatePopulationChartSelection();
+  hidePopulationChartTooltip();
+  hideTooltip();
+  updateMap();
+}
+
+function updatePopulationChartSelection() {
+  if (populationChartLineSelection) {
+    populationChartLineSelection
+      .classed("is-active", group =>
+        appState.groups.includes(group.groupKey)
+      )
+      .classed("is-faded", group =>
+        !appState.groups.includes(group.groupKey)
+      );
+  }
+
+  if (populationChartKeySelection) {
+    populationChartKeySelection
+      .property("checked", function() {
+        return appState.groups.includes(this.value);
+      });
+  }
+}
+
+function showPopulationChartTooltip(event, group) {
+  const chartWrap = document.querySelector(".population-chart-wrap");
+  const chartTooltip = d3.select("#population-chart-tooltip");
+  const bounds = chartWrap.getBoundingClientRect();
+
+  const values = group.values
+    .map(point =>
+      `${point.year}: ${
+        Number.isFinite(point.value)
+          ? (appState.metric === "percent" ? signedPercent(point.value) : signedInteger(point.value))
+          : "N/A"
+      }`
+    )
+    .join("<br>");
+
+  chartTooltip
+    .style("opacity", 1)
+    .attr("aria-hidden", "false")
+    .html(`
+      <strong>${escapeHTML(GROUPS[group.groupKey].label)}</strong><br>
+      ${appState.metric === "percent" ? "Percent" : "Count"} change from ${availableYears[0]}<br>
+      ${values}
+    `);
+
+  const tooltipNode = document.querySelector("#population-chart-tooltip");
+  let left = event.clientX - bounds.left + 10;
+  let top = event.clientY - bounds.top + 10;
+
+  if (left + tooltipNode.offsetWidth > bounds.width) {
+    left = event.clientX - bounds.left - tooltipNode.offsetWidth - 10;
+  }
+
+  if (top + tooltipNode.offsetHeight > bounds.height) {
+    top = event.clientY - bounds.top - tooltipNode.offsetHeight - 10;
+  }
+
+  chartTooltip
+    .style("left", `${Math.max(0, left)}px`)
+    .style("top", `${Math.max(0, top)}px`);
+}
+
+function hidePopulationChartTooltip() {
+  d3.select("#population-chart-tooltip")
+    .style("opacity", 0)
+    .attr("aria-hidden", "true");
 }
 
 function populateYearControls() {
@@ -1463,14 +1743,15 @@ function updateYearOptions() {
 }
 
 function updateMapTitle() {
-  d3.selectAll("#metric-controls button")
-    .classed("is-active", function () { return this.dataset.value === appState.metric; });
+  const title = document.querySelector(".map-header h1");
 
-  const groupSelect = document.querySelector("#group-select");
-  if (groupSelect) {
-    groupSelect.value = appState.groups[0] || "total";
-    syncInlineSelectDisplay(groupSelect, "group-select-display", GROUP_LABELS);
-  }
+  if (!title) return;
+
+  const metricLabel = appState.metric === "percent" ? "percent" : "count";
+
+  title.textContent =
+    `Showing ${metricLabel} ${selectedPopulationTitleLabel()} population change, ` +
+    `${appState.startYear}–${appState.endYear}`;
 }
 
 function wireYearControls() {
@@ -1540,24 +1821,7 @@ function wireStaticControls() {
   d3.selectAll("#metric-controls button")
     .classed("is-active", function () { return this.dataset.value === appState.metric; });
 
-  d3.selectAll("#metric-controls button").on("click", function () {
-    appState.metric = this.dataset.value;
-    updateMap();
-  });
-
-  document.querySelector("#metric-controls .toggle-switch-track")
-    .addEventListener("click", () => {
-      appState.metric = appState.metric === "count" ? "percent" : "count";
-      updateMap();
-    });
-
-  const groupSelect = document.querySelector("#group-select");
-  groupSelect.addEventListener("change", event => {
-    appState.groups = [event.target.value];
-    hideTooltip();
-    updateMap();
-  });
-
+  wireButtonGroup("#metric-controls button", "metric", drawPopulationChart);
   wireYearControls();
 
   document.querySelector("#sign-filter")
@@ -1613,6 +1877,18 @@ function resetCountySearch() {
   closeCountySearchSuggestions();
 }
 
+function wireButtonGroup(selector, stateKey, onChange) {
+  d3.selectAll(selector).on("click", function () {
+    appState[stateKey] = this.dataset.value;
+
+    d3.selectAll(selector).classed("is-active", false);
+    d3.select(this).classed("is-active", true);
+
+    updateMap();
+    if (onChange) onChange();
+  });
+}
+
 window.addEventListener("popstate", () => {
   appState.division = "all";
   appState.groups = ["total"];
@@ -1629,7 +1905,9 @@ window.addEventListener("popstate", () => {
   if (!availableYears.length || !countyLayer || !stateLayer) return;
 
   populateYearControls();
-  updateMapTitle();
+  d3.selectAll("#metric-controls button")
+    .classed("is-active", function () { return this.dataset.value === appState.metric; });
+  drawPopulationChart();
   updateStateDropdown();
   updateRegionDropdown();
 

@@ -52,6 +52,9 @@ body {
   background: #fff;
   font-family: "Benton Sans", Helvetica, Arial, sans-serif;
 }
+.control-group{
+  padding-bottom:10px;
+}
 button,
 input,
 select {
@@ -59,22 +62,15 @@ select {
 }
 
 .county-map-app {
-  width: min(900px, 100%);
+  width: min(1440px, 100%);
   margin: 0 auto;
   padding: 20px;
 }
 
 .map-header h1 {
-  max-width: 900px;
-  margin: 0 0 20px;
-  font-size: 28px;
-  line-height: 1.7;
-  font-weight: 400;
-  color: #111;
-}
-
-.map-header h1 .inline-select {
-  font-size: inherit;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .map-header p {
@@ -82,6 +78,12 @@ select {
   margin: 0 0 20px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.controls {
+  display: grid;
+  gap: 13px;
+  margin-bottom: 14px;
 }
 
 .control-label {
@@ -92,52 +94,44 @@ select {
   text-transform: uppercase;
 }
 
-.metric-toggle-row {
-  margin: 30px 0 20px;
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.toggle-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+.year-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.toggle-switch button {
-  border: 0;
-  padding: 0;
-  background: none;
+.year-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
   color: var(--muted);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color 160ms ease;
+  font-size: 11px;
 }
 
-.toggle-switch button.is-active {
-  color: #111;
-}
-
-.toggle-switch-track {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 20px;
+.year-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 28px 7px 8px;
   border: 1px solid #777;
+  border-radius: 0;
+  color: #111;
+  background: #fff;
   cursor: pointer;
 }
 
-.toggle-switch-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  background: #111;
-  transition: transform 200ms ease;
-}
-
-.toggle-switch:has(button[data-value="percent"].is-active) .toggle-switch-knob {
-  transform: translateX(20px);
+.inline-select-sentence {
+  margin: 30px 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 13px;
 }
 
 .inline-select-wrap {
@@ -154,12 +148,12 @@ select {
   border-radius: 0;
   background: none;
   margin: 0;
-  padding: 0 22px 0 0;
+  padding: 0 16px 0 0;
   font: inherit;
   font-weight: 700;
   color: #111;
   text-decoration: underline;
-  text-decoration-style: solid;
+  text-decoration-style: dotted;
   text-underline-offset: 2px;
   cursor: pointer;
 }
@@ -173,51 +167,12 @@ select {
   outline-offset: 2px;
 }
 
-/*
-  #sign-filter, #type-filter, and #group-select all have options whose
-  text length varies a lot from the current selection (count suffixes, or
-  just longer/shorter labels), and browsers size a <select> box to fit its
-  widest option rather than the selected one. That leaves a gap between
-  the visible text and the arrow after it. The sibling
-  .inline-select-display span (normal flow, sized to its own plain-label
-  text) is what's actually visible; the select itself is stretched over it
-  fully transparent, so the wrap's width follows the current label instead.
-  Text kept in sync in JS via syncInlineSelectDisplay().
-*/
-#sign-filter,
-#type-filter,
-#group-select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.inline-select-display {
-  padding: 0 22px 0 0;
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-style: solid;
-  text-underline-offset: 2px;
-  color: #111;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-#sign-filter:hover + .inline-select-display,
-#type-filter:hover + .inline-select-display,
-#group-select:hover + .inline-select-display {
-  color: var(--blue);
-}
-
 .inline-select-arrow {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  font-size: inherit;
-  line-height: 1;
+  font-size: 10px;
   color: #111;
   pointer-events: none;
 }
@@ -263,13 +218,27 @@ select {
 
 .visualization {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 22px;
   align-items: start;
 }
+.left-panel{
+  height:100%;
+  padding-right:10px;
+  border-right:1px solid black;
+}
+.left-panel,
 .map-column,
 .map-wrap {
   min-width: 0;
+}
+.left-panel {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  padding-right: 10px;
+  border-right: 1px solid black;
+  background: #fff;
 }
 
 .map-column {
@@ -555,9 +524,113 @@ select {
 }
 
 
+.population-chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
+#population-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.population-chart-axis path,
+.population-chart-axis line {
+  stroke: #aaa;
+}
+
+.population-chart-axis text {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.population-chart-grid line {
+  stroke: #ddd;
+  stroke-dasharray: 2 2;
+}
+
+.population-chart-grid path {
+  display: none;
+}
+
+.population-line {
+  fill: none;
+  stroke-width: 2;
+  cursor: pointer;
+  transition:
+    opacity 160ms ease,
+    stroke-width 160ms ease;
+}
+
+.population-line:hover,
+.population-line.is-active {
+  stroke-width: 4;
+}
+
+.population-line.is-faded {
+  opacity: 0.18;
+}
+
+.population-chart-dot {
+  pointer-events: none;
+}
+
+.population-chart-key {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.population-chart-key-option {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 2px 0;
+  color: var(--line-color);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.population-chart-key-option input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
+.population-chart-key-option:has(input:checked) {
+  font-weight: 700;
+}
+
+.population-chart-key-option:has(input:not(:checked)) {
+  opacity: 0.35;
+}
+
+.population-chart-tooltip {
+  position: absolute;
+  z-index: 30;
+  max-width: 210px;
+  padding: 7px 9px;
+  border: 1px solid #000;
+  color: #111;
+  background: rgba(255, 255, 255, 0.98);
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+}
+
 @media (max-width: 850px) {
   .visualization {
     grid-template-columns: 1fr;
+  }
+
+  .left-panel {
+    position: static;
   }
 
   .state-grid {

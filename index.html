@@ -17,56 +17,53 @@
     <div id="error" class="error" hidden></div>
 
     <section id="visualization" class="visualization" hidden>
-      <aside class="left-panel">
-
-        <section class="controls" aria-label="Map controls">
-  
-
-      <div class="control-group">
-        <div class="control-label">Measure</div>
-        <div class="button-row" id="metric-controls">
-          <button type="button" class="is-active" data-value="count">Count change</button>
-          <button type="button" data-value="percent">Percent change</button>
-        </div>
-      </div>
-
-      <div class="control-group population-chart-group">
-        <div class="control-label">Population</div>
-        <div class="population-chart-wrap">
-          <svg
-            id="population-chart"
-            viewBox="0 0 280 210"
-            role="img"
-            aria-label="Percent population change by race and ethnicity for the United States"
-          ></svg>
-          <div id="population-chart-tooltip" class="population-chart-tooltip" aria-hidden="true"></div>
-        </div>
-        <div id="population-chart-key" class="population-chart-key" aria-label="Population groups"></div>
-      </div>
-
-      <div class="control-group">
-        <div class="control-label">Years</div>
-        <div class="year-controls">
-          <label for="start-year">
-            <span>Comparing</span>
-            <select id="start-year" aria-label="Start year"></select>
-          </label>
-
-          <label for="end-year">
-            <span>to</span>
-            <select id="end-year" aria-label="End year"></select>
-          </label>
-        </div>
-      </div>
-       
-        </section>
-
-       
-      </aside>
-
       <div class="map-column">
     <header class="map-header">
-      <h1>Showing count Total population change, 2020–2025</h1>
+      <h1>
+        Showing
+        <span class="inline-select-wrap">
+          <select id="sign-filter" class="inline-select" aria-label="Filter by direction of change">
+            <option value="all">increases and decreases</option>
+            <option value="positive">increase only</option>
+            <option value="negative">decrease only</option>
+          </select>
+          <span id="sign-filter-display" class="inline-select-display" aria-hidden="true">increases and decreases</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        in
+        <span class="inline-select-wrap">
+          <select id="group-select" class="inline-select" aria-label="Choose population group"></select>
+          <span id="group-select-display" class="inline-select-display" aria-hidden="true">total population</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        for
+        <span class="inline-select-wrap">
+          <select id="type-filter" class="inline-select" aria-label="Filter by county type">
+            <option value="all">all county types</option>
+            <option value="large_central_metro">large central metro counties</option>
+            <option value="large_fringe_metro">large fringe metro counties</option>
+            <option value="medium_metro">medium metro counties</option>
+            <option value="small_metro">small metro counties</option>
+            <option value="micropolitan">micropolitan counties</option>
+            <option value="noncore">noncore counties</option>
+          </select>
+          <span id="type-filter-display" class="inline-select-display" aria-hidden="true">all county types</span>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        <br>
+        between
+        <span class="inline-select-wrap">
+          <select id="start-year" class="inline-select" aria-label="Start year"></select>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+        and
+        <span class="inline-select-wrap">
+          <select id="end-year" class="inline-select" aria-label="End year"></select>
+          <span class="inline-select-arrow" aria-hidden="true">▾</span>
+        </span>
+      </h1>
     </header>
      <section class="controls-row">
         <label class="county-search-label" for="county-search-input">
@@ -104,6 +101,16 @@
           </select>
         </label>
         </section>
+    <div class="metric-toggle-row">
+      <div class="toggle-switch" id="metric-controls">
+        <button type="button" class="is-active" data-value="count">Count</button>
+        <span class="toggle-switch-track" aria-hidden="true">
+          <span class="toggle-switch-knob"></span>
+        </span>
+        <button type="button" data-value="percent">Percent</button>
+      </div>
+    </div>
+
     <div class="legend-row">
       <div class="legend-filter">
         <div id="legend-label" class="legend-label"></div>
@@ -117,31 +124,6 @@
         </div>
       </div>
     </div>
-
-    <p class="inline-select-sentence">
-      Show:
-      <span class="inline-select-wrap">
-        <select id="sign-filter" class="inline-select" aria-label="Filter by direction of change">
-          <option value="all">all change</option>
-          <option value="positive">increase only</option>
-          <option value="negative">decrease only</option>
-        </select>
-        <span class="inline-select-arrow" aria-hidden="true">▾</span>
-      </span>
-      in
-      <span class="inline-select-wrap">
-        <select id="type-filter" class="inline-select" aria-label="Filter by county type">
-          <option value="all">all county types</option>
-          <option value="large_central_metro">large central metro</option>
-          <option value="large_fringe_metro">large fringe metro</option>
-          <option value="medium_metro">medium metro</option>
-          <option value="small_metro">small metro</option>
-          <option value="micropolitan">micropolitan</option>
-          <option value="noncore">noncore</option>
-        </select>
-        <span class="inline-select-arrow" aria-hidden="true">▾</span>
-      </span>
-    </p>
 
         <div class="map-wrap">
           <svg
@@ -192,6 +174,10 @@
             </table>
           </div>
         </section>
+
+        <p class="source-note">
+          County type: <a href="https://www.cdc.gov/nchs/data-analysis-tools/urban-rural.html#cdc_data_surveillance_section_9-2023-urban-rural-classification-scheme" target="_blank" rel="noopener noreferrer">CDC/NCHS 2023 Urban-Rural Classification Scheme for Counties</a>
+        </p>
       </div>
 
     </section>
