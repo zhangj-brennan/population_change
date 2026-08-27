@@ -716,8 +716,8 @@ select {
 
 .county-table td:nth-child(3),
 .county-table th:nth-child(3) {
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 130px;
+  max-width: 160px;
   white-space: normal;
 }
 
