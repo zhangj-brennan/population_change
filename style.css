@@ -67,7 +67,7 @@ select {
 .map-header h1 {
   max-width: 900px;
   margin: 0 0 20px;
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.7;
   font-weight: 400;
   color: #111;
@@ -568,6 +568,10 @@ select {
 @media (max-width: 520px) {
   .county-map-app {
     padding: 14px;
+  }
+
+  .map-header h1 {
+    font-size: 19px;
   }
 
   .button-row button {
