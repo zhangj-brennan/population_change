@@ -704,10 +704,7 @@ const filterDomainMax = Math.ceil((trueExtent[1] || 0) / filterStep) * filterSte
   lighter than that, via the flat overrides below and in the legend's
   zero band.
 */
-const NEGATIVE_COLOR_BASE = "#FFCF01";
-const NEGATIVE_COLOR_REDDEN_TARGET = "#ED1C24";
-const NEGATIVE_REDDEN_MIX = 0.2;
-const NEGATIVE_COLOR_FULL = d3.interpolateRgb(NEGATIVE_COLOR_BASE, NEGATIVE_COLOR_REDDEN_TARGET)(NEGATIVE_REDDEN_MIX);
+const NEGATIVE_COLOR_FULL = "#E8531C";
 const POSITIVE_COLOR_FULL = "#711471";
 const NEGATIVE_TINT_FLOOR_MIX = 0.97;
 const POSITIVE_TINT_FLOOR_MIX = 0.9;
