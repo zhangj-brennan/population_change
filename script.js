@@ -1,3 +1,8 @@
+// ---------------------------------------------------------------------------
+// Static config: data file paths and the lookup tables used throughout the
+// app (county-type codes, population group definitions, state/region
+// metadata). None of this changes at runtime.
+// ---------------------------------------------------------------------------
 const FILES = {
   population: "data/Vintage 2025 counties race & ethnicity 1.csv",
   urbanRural: "cdc_urban_rural.csv",
@@ -168,6 +173,11 @@ const REGION_STATE_FIPS = Object.fromEntries(
 );
 
 
+// ---------------------------------------------------------------------------
+// App state: the single source of truth for every active filter/selection.
+// Every UI control reads and writes this object, and updateMap() re-derives
+// the entire view (colors, legend, table, dropdown counts, URL) from it.
+// ---------------------------------------------------------------------------
 const appState = {
   division: "all",
   groups: ["total"],
@@ -193,6 +203,11 @@ function hasActiveFilter() {
     Boolean(appState.selectedRegion);
 }
 
+// ---------------------------------------------------------------------------
+// URL state sync: reading appState from the query string on load, and
+// writing it back out after every change, so filters/selections are
+// shareable and survive a refresh.
+// ---------------------------------------------------------------------------
 let requestedCountyFips = null;
 
 function readURLState() {
@@ -254,6 +269,9 @@ function updateURLState() {
   window.history.replaceState(null, "", url);
 }
 
+// ---------------------------------------------------------------------------
+// DOM handles and mutable module state, populated once data/geometry loads.
+// ---------------------------------------------------------------------------
 const loading = document.querySelector("#loading");
 const errorBox = document.querySelector("#error");
 const visualization = document.querySelector("#visualization");
@@ -274,6 +292,11 @@ let countySearchIndex = [];
 let countySearchResults = [];
 let countySearchActiveIndex = -1;
 
+// ---------------------------------------------------------------------------
+// Boot sequence: wire up every control and kick off the async data load.
+// Controls are wired before data arrives so the page is interactive (search
+// box aside) the instant it's visible; loadData() fills in the map/rows.
+// ---------------------------------------------------------------------------
 readURLState();
 appState.tableVisible = hasActiveFilter();
 buildGroupDropdown();
@@ -287,6 +310,11 @@ updateCountyTableVisibility();
 wireTooltipClose();
 loadData();
 
+// ---------------------------------------------------------------------------
+// Data loading: fetch geometry + CSVs in parallel, build the county records
+// the rest of the app runs on, then draw the map and restore the requested
+// state/region/county selection from the URL.
+// ---------------------------------------------------------------------------
 async function loadData() {
   try {
     const [geoJSON, statesGeoJSONData, populationRows, urbanRuralRows] = await Promise.all([
@@ -361,6 +389,10 @@ async function loadData() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Population CSV parsing: turn raw Census estimate rows into per-county,
+// per-year population values keyed by group (total/white/black/etc).
+// ---------------------------------------------------------------------------
 function parsePopulationRow(row) {
   const ageGroup = Number(row.AGEGRP);
   const year = Number(row.YEAR);
@@ -457,6 +489,11 @@ function buildCountyRecords(populationRows, urbanRuralLookup) {
   return records;
 }
 
+// ---------------------------------------------------------------------------
+// Map rendering setup: project the GeoJSON once, draw the county/state/
+// highlight layers, and bind tooltip events. Colors are filled in later by
+// updateMap() — this only lays down the paths.
+// ---------------------------------------------------------------------------
 function drawMap(geoJSON, statesGeoJSONData) {
   const svg = d3.select("#county-map");
 
@@ -505,6 +542,10 @@ function drawMap(geoJSON, statesGeoJSONData) {
     .attr("d", path);
 }
 
+// ---------------------------------------------------------------------------
+// Population value + change helpers, shared by the map fill, legend,
+// tooltip, and county table so all four always agree on the same number.
+// ---------------------------------------------------------------------------
 function selectedPopulationValue(row, year) {
   if (!row) return null;
 
@@ -583,6 +624,11 @@ function valueForCounty(row) {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Filter dropdowns: the sign (increase/decrease) and county-type selects,
+// including keeping their option labels' county counts and the collapsed
+// mad-lib display text in sync with appState.
+// ---------------------------------------------------------------------------
 function matchesSignFilter(value) {
   if (appState.signFilter === "positive") return value > 0;
   if (appState.signFilter === "negative") return value < 0;
@@ -641,6 +687,89 @@ function syncInlineSelectDisplay(select, displayId, labels) {
   if (display) display.textContent = labels[select.value] || select.value;
 }
 
+// ---------------------------------------------------------------------------
+// Color scale
+//
+// Negative (loss) and positive (gain) sides are interpolated independently
+// rather than through one continuous diverging scale, so that both sides
+// fade toward the same LEGEND_ZERO_COLOR grey as they approach zero instead
+// of two different tints meeting in the middle. None of this depends on
+// which counties are currently in view, so unlike the values below it's
+// computed once here rather than rebuilt on every updateMap() call.
+// ---------------------------------------------------------------------------
+const LEGEND_WIDTH_PX = 240;
+const LEGEND_ZERO_COLOR = "#EBEAE9";
+
+const NEGATIVE_COLOR_FULL = "#E8531C";
+const POSITIVE_COLOR_FULL = "#711471";
+const NEGATIVE_TINT_FLOOR_MIX = 0.97;
+const POSITIVE_TINT_FLOOR_MIX = 0.9;
+const NEGATIVE_COLOR_TINT = d3.interpolateRgb(NEGATIVE_COLOR_FULL, LEGEND_ZERO_COLOR)(NEGATIVE_TINT_FLOOR_MIX);
+const POSITIVE_COLOR_TINT = d3.interpolateRgb(POSITIVE_COLOR_FULL, LEGEND_ZERO_COLOR)(POSITIVE_TINT_FLOOR_MIX);
+const negativeColorRamp = d3.interpolateRgb(NEGATIVE_COLOR_TINT, NEGATIVE_COLOR_FULL);
+const positiveColorRamp = d3.interpolateRgb(POSITIVE_COLOR_TINT, POSITIVE_COLOR_FULL);
+
+/*
+  Ratio of value to the current max on its side, raised to a power (1 =
+  plain linear; >1 would compress modest changes toward grey and reserve
+  full saturation for only the most extreme counties, as tried earlier).
+*/
+const COLOR_CURVE_EXPONENT = 1;
+
+/*
+  Percent changes under this threshold (in either direction) render as flat
+  grey rather than a barely-there sliver of color, since a change that
+  small isn't meaningfully different from no change. Only applies to the
+  percent metric — count changes have no equivalent unit to bound a
+  "negligible" threshold against.
+*/
+const NEGLIGIBLE_PERCENT_THRESHOLD = 0.5;
+
+/*
+  Normalizes a raw count/percent change into [-1, 1] relative to the given
+  negative/positive limits (the most extreme loss/gain among the counties
+  currently in view — these come from updateMap() since they change with
+  the active filters). Returns null for missing data.
+*/
+function colorValue(value, negativeLimit, positiveLimit) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  if (appState.metric === "percent" && Math.abs(value) < NEGLIGIBLE_PERCENT_THRESHOLD) {
+    return 0;
+  }
+
+  if (value < 0) {
+    return -((Math.min(Math.abs(value), negativeLimit) / negativeLimit) ** COLOR_CURVE_EXPONENT);
+  }
+
+  if (value > 0) {
+    return (Math.min(value, positiveLimit) / positiveLimit) ** COLOR_CURVE_EXPONENT;
+  }
+
+  return 0;
+}
+
+/*
+  Smooth continuous ramp: each side interpolates directly from its tint
+  (which meets at LEGEND_ZERO_COLOR) to its full saturated color. Since
+  both ramps converge on the same grey at zero, the transition across the
+  middle reads as one continuous fade rather than needing a hard band.
+*/
+function colorScale(scaledValue) {
+  if (scaledValue < 0) {
+    return negativeColorRamp(Math.min(1, -scaledValue));
+  }
+  if (scaledValue > 0) {
+    return positiveColorRamp(Math.min(1, scaledValue));
+  }
+  return LEGEND_ZERO_COLOR;
+}
+
+// ---------------------------------------------------------------------------
+// County dimming — fading everything outside the selected state/region
+// ---------------------------------------------------------------------------
 function isCountyDimmed(feature) {
   const stateFips = featureStateFips(feature);
 
@@ -659,9 +788,16 @@ function applyCountyDimming() {
   countySelection.classed("is-dimmed", isCountyDimmed);
 }
 
+// ---------------------------------------------------------------------------
+// The main render: recomputes filters, colors, the legend, dropdown option
+// counts, the county table, and the URL from the current appState, then
+// applies all of it to the map. Called after every filter/selection change.
+// ---------------------------------------------------------------------------
 function updateMap({ deferDimming = false } = {}) {
   updateMapTitle();
 
+  // Rows scoped to the current state/region selection — feeds the
+  // type-filter dropdown's counts, the color scale limits, and dimming.
   const regionRows = countyRows.filter(row =>
     (!appState.selectedState || row.stateFips === appState.selectedState) &&
     (
@@ -672,6 +808,8 @@ function updateMap({ deferDimming = false } = {}) {
 
   updateTypeFilterOptions(regionRows);
 
+  // Also scoped to the county-type filter — feeds the sign-filter
+  // dropdown's counts and the is-filtered (out-of-type) map styling.
   const geographyRows = regionRows.filter(row =>
     appState.division === "all" || row.division === appState.division
   );
@@ -695,106 +833,36 @@ function updateMap({ deferDimming = false } = {}) {
     .map(valueForCounty)
     .filter(Number.isFinite);
 
- const negativeValues = values
-  .filter(value => value < 0)
-  .map(Math.abs)
-  .sort(d3.ascending);
+  const negativeValues = values
+    .filter(value => value < 0)
+    .map(Math.abs)
+    .sort(d3.ascending);
 
-const positiveValues = values
-  .filter(value => value > 0)
-  .sort(d3.ascending);
+  const positiveValues = values
+    .filter(value => value > 0)
+    .sort(d3.ascending);
 
-/*
-  Cap losses and gains at the true max within the currently selected
-  geography/division, so the ramp always uses its full range: the
-  most extreme county on each side always reads as the darkest color.
-*/
-const negativeLimit = d3.max(negativeValues) || 1;
+  /*
+    Cap losses and gains at the true max within the currently selected
+    geography/division, so the ramp always uses its full range: the most
+    extreme county on each side always reads as the darkest color.
+  */
+  const negativeLimit = d3.max(negativeValues) || 1;
+  const positiveLimit = d3.max(positiveValues) || 1;
+  const scaleColorValue = value => colorValue(value, negativeLimit, positiveLimit);
 
-const positiveLimit = d3.max(positiveValues) || 1;
+  // Legend axis bounds: the true min/max, rounded outward to a round step.
+  const filterStep = appState.metric === "percent" ? 5 : 1000;
+  const trueExtent = d3.extent(values);
+  const filterDomainMin = Math.floor((trueExtent[0] || 0) / filterStep) * filterStep;
+  const filterDomainMax = Math.ceil((trueExtent[1] || 0) / filterStep) * filterStep;
 
-/*
-  Ratio of value to the current max on its side, raised to a power (1 =
-  plain linear; >1 would compress modest changes toward grey and reserve
-  full saturation for only the most extreme counties, as tried earlier).
-*/
-const COLOR_CURVE_EXPONENT = 1;
-
-/*
-  Percent changes under this threshold (in either direction) render as
-  flat grey rather than a barely-there sliver of color, since a change
-  that small isn't meaningfully different from no change. Only applies
-  to the percent metric — count changes have no equivalent unit to bound
-  a "negligible" threshold against.
-*/
-const NEGLIGIBLE_PERCENT_THRESHOLD = 0.5;
-
-function colorValue(value) {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  if (appState.metric === "percent" && Math.abs(value) < NEGLIGIBLE_PERCENT_THRESHOLD) {
-    return 0;
-  }
-
-  if (value < 0) {
-    return -((Math.min(Math.abs(value), negativeLimit) / negativeLimit) ** COLOR_CURVE_EXPONENT);
-  }
-
-  if (value > 0) {
-    return (Math.min(value, positiveLimit) / positiveLimit) ** COLOR_CURVE_EXPONENT;
-  }
-
-  return 0;
-}
-
-const filterStep = appState.metric === "percent" ? 5 : 1000;
-const trueExtent = d3.extent(values);
-const filterDomainMin = Math.floor((trueExtent[0] || 0) / filterStep) * filterStep;
-const filterDomainMax = Math.ceil((trueExtent[1] || 0) / filterStep) * filterStep;
-
-/*
-  Negative and positive sides are interpolated independently (rather than
-  through one continuous diverging scale) so that "approaching zero" never
-  fades past the tint floor below. Only the exact zero value renders
-  lighter than that, via the flat overrides below and in the legend's
-  zero band.
-*/
-const NEGATIVE_COLOR_FULL = "#E8531C";
-const POSITIVE_COLOR_FULL = "#711471";
-const NEGATIVE_TINT_FLOOR_MIX = 0.97;
-const POSITIVE_TINT_FLOOR_MIX = 0.9;
-const NEGATIVE_COLOR_TINT = d3.interpolateRgb(NEGATIVE_COLOR_FULL, LEGEND_ZERO_COLOR)(NEGATIVE_TINT_FLOOR_MIX);
-const POSITIVE_COLOR_TINT = d3.interpolateRgb(POSITIVE_COLOR_FULL, LEGEND_ZERO_COLOR)(POSITIVE_TINT_FLOOR_MIX);
-const negativeColorRamp = d3.interpolateRgb(NEGATIVE_COLOR_TINT, NEGATIVE_COLOR_FULL);
-const positiveColorRamp = d3.interpolateRgb(POSITIVE_COLOR_TINT, POSITIVE_COLOR_FULL);
-
-/*
-  Smooth continuous ramp: each side interpolates directly from its tint
-  (which meets at LEGEND_ZERO_COLOR) to its full saturated color. Since
-  both ramps converge on the same grey at zero, the transition across the
-  middle reads as one continuous fade rather than needing a hard band.
-*/
-function colorScale(scaledValue) {
-  if (scaledValue < 0) {
-    return negativeColorRamp(Math.min(1, -scaledValue));
-  }
-  if (scaledValue > 0) {
-    return positiveColorRamp(Math.min(1, scaledValue));
-  }
-  return LEGEND_ZERO_COLOR;
-}
-  countySelection
-    .classed("is-filtered", feature => {
-      const row = countyByFips.get(featureFips(feature));
-      return !row ||
-        (
-          appState.division !== "all" &&
-          row.division !== appState.division
-        ) ||
-        !matchesSignFilter(valueForCounty(row));
-    });
+  countySelection.classed("is-filtered", feature => {
+    const row = countyByFips.get(featureFips(feature));
+    return !row ||
+      (appState.division !== "all" && row.division !== appState.division) ||
+      !matchesSignFilter(valueForCounty(row));
+  });
 
   if (!deferDimming) {
     applyCountyDimming();
@@ -818,44 +886,31 @@ function colorScale(scaledValue) {
     : countySelection;
   hasPaintedCountyFillOnce = true;
 
-  countiesToFill
-    .attr("fill", feature => {
-      const row = countyByFips.get(featureFips(feature));
+  countiesToFill.attr("fill", feature => {
+    const row = countyByFips.get(featureFips(feature));
 
-      if (!row) return "#ededed";
+    if (!row) return "#ededed";
+    if (appState.division !== "all" && row.division !== appState.division) return "#ededed";
+    if (!matchesSignFilter(valueForCounty(row))) return "#ededed";
 
-      if (
-        appState.division !== "all" &&
-        row.division !== appState.division
-      ) {
-        return "#ededed";
-      }
+    const scaledValue = scaleColorValue(valueForCounty(row));
+    return scaledValue === null ? "#d9d9d9" : colorScale(scaledValue);
+  });
 
-      if (!matchesSignFilter(valueForCounty(row))) {
-        return "#ededed";
-      }
+  const highlightedFeature = appState.highlightedCountyFips
+    ? featuresByFips.get(appState.highlightedCountyFips)
+    : null;
 
-      const value = valueForCounty(row);
-      const scaledValue = colorValue(value);
+  highlightLayer
+    .selectAll("path")
+    .data(highlightedFeature ? [highlightedFeature] : [])
+    .join("path")
+    .attr("class", "county-highlight-outline")
+    .attr("d", path);
 
-      if (scaledValue === null) return "#d9d9d9";
-      return colorScale(scaledValue);
-    });
+  const legendGradient = buildLegendGradient(filterDomainMin, filterDomainMax, scaleColorValue, colorScale);
+  updateLegend(filterDomainMin, filterDomainMax, legendGradient);
 
-const highlightedFeature = appState.highlightedCountyFips
-  ? featuresByFips.get(appState.highlightedCountyFips)
-  : null;
-
-highlightLayer
-  .selectAll("path")
-  .data(highlightedFeature ? [highlightedFeature] : [])
-  .join("path")
-  .attr("class", "county-highlight-outline")
-  .attr("d", path);
-
-const legendGradient = buildLegendGradient(filterDomainMin, filterDomainMax, colorValue, colorScale);
-
-updateLegend(filterDomainMin, filterDomainMax, legendGradient);
   updateStateDropdown();
   updateRegionDropdown();
   updateStatus();
@@ -863,15 +918,17 @@ updateLegend(filterDomainMin, filterDomainMax, legendGradient);
   updateURLState();
 }
 
-const LEGEND_WIDTH_PX = 240;
-const LEGEND_ZERO_COLOR = "#EBEAE9";
-
 /*
   Samples colorValue/colorScale continuously across the domain, so the
   legend is a smooth fade matching the map's ramp exactly (both sides
   converge on LEGEND_ZERO_COLOR at zero, so no artificial band is needed
   to mark the crossing).
 */
+// ---------------------------------------------------------------------------
+// Legend: builds a CSS gradient by sampling the same colorValue/colorScale
+// pair used to fill the map, so the legend can never visually drift from
+// the map's actual colors.
+// ---------------------------------------------------------------------------
 function buildLegendGradient(domainMin, domainMax, colorValue, colorScale) {
   const stopCount = 120;
   const span = domainMax - domainMin || 1;
@@ -912,6 +969,11 @@ function updateLegend(domainMin, domainMax, gradient) {
     (appState.metric === "count" ? "count change" : "percent change");
 }
 
+// ---------------------------------------------------------------------------
+// County data table: the sortable, collapsible list of counties matching
+// the current filters. Rendering is skipped entirely while collapsed
+// (see updateCountyTable) since sorting ~3,100 rows is wasted otherwise.
+// ---------------------------------------------------------------------------
 function countyPassesActiveFilters(row) {
   if (!row) return false;
 
@@ -1127,6 +1189,9 @@ function updateCountyTable() {
   }).join("");
 }
 
+// ---------------------------------------------------------------------------
+// Status line: the "N counties shown · <geography>" text under the map.
+// ---------------------------------------------------------------------------
 function updateStatus() {
   const shownCount = countyRows.filter(countyPassesActiveFilters).length;
 
@@ -1142,6 +1207,9 @@ function updateStatus() {
     `${d3.format(",")(shownCount)} counties shown · ${geographyLabel}`;
 }
 
+// ---------------------------------------------------------------------------
+// Tooltip: the hover/tap popup showing a single county's population change.
+// ---------------------------------------------------------------------------
 function showTooltip(event, feature) {
   const row = countyByFips.get(featureFips(feature));
   if (!row) return;
@@ -1236,6 +1304,11 @@ function wireTooltipClose() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Pan / zoom: selecting a state or region pans/scales the map layers via a
+// CSS transform, sequenced around updateMap() to avoid animating a pan/zoom
+// and a full-map recolor at the same time (see comment below).
+// ---------------------------------------------------------------------------
 /*
   Zooming IN scopes the color scale to just the selected state, so the
   "reveal everything outside it" work (fill + dimming) is cheap and can
@@ -1361,6 +1434,10 @@ function zoomToStateFips(stateFipsList) {
     .style("transform", transform);
 }
 
+// ---------------------------------------------------------------------------
+// County search: the typeahead box that jumps the map to a specific county
+// (selecting its state and highlighting it) rather than filtering the map.
+// ---------------------------------------------------------------------------
 function buildCountySearchIndex() {
   countySearchIndex = countyRows
     .map(row => ({
@@ -1537,6 +1614,10 @@ function wireCountySearch() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Dropdown / control wiring: building the group, year, state, and region
+// selects, and hooking every static control up to appState + updateMap().
+// ---------------------------------------------------------------------------
 function buildGroupDropdown() {
   const select = document.querySelector("#group-select");
 
@@ -1748,6 +1829,10 @@ function resetCountySearch() {
   closeCountySearchSuggestions();
 }
 
+// ---------------------------------------------------------------------------
+// Browser back/forward: reset to defaults then re-apply whatever the URL
+// says, so navigating history moves the map instead of just the address bar.
+// ---------------------------------------------------------------------------
 window.addEventListener("popstate", () => {
   appState.division = "all";
   appState.groups = ["total"];
@@ -1795,6 +1880,9 @@ window.addEventListener("popstate", () => {
   updateMap();
 });
 
+// ---------------------------------------------------------------------------
+// Small formatting/utility helpers used throughout the file above.
+// ---------------------------------------------------------------------------
 function featureFips(feature) {
   return String(feature.properties.GEOID).padStart(5, "0");
 }
