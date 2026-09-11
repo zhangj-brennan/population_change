@@ -384,7 +384,7 @@ async function loadData() {
       <strong>The map could not load its data files.</strong><br>
       ${escapeHTML(error.message)}<br><br>
       Because the page imports CSV and GeoJSON files, open it through a local web
-      server rather than double-clicking <code>index.html</code>. For example:
+      server rather than double-clicking <code>main.html</code>. For example:
       <code>python3 -m http.server</code>
     `;
   }

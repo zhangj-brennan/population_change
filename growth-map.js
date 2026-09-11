@@ -114,27 +114,31 @@ function buildCountyRecords(populationRows) {
 }
 
 /*
-  Compares every subgroup's change between startYear and endYear for one
-  county and returns whichever subgroup added the most people. A
-  dominantChange <= 0 means no subgroup actually grew over that span.
+  Every subgroup's change between startYear and endYear for one county,
+  sorted largest to smallest — the basis for both the dominant-group fill
+  and the full per-group breakdown shown in the tooltip.
+*/
+function computeGroupChanges(row, startYear, endYear) {
+  return Object.keys(GROWTH_GROUPS)
+    .map(groupKey => {
+      const start = row.values[groupKey]?.[startYear];
+      const end = row.values[groupKey]?.[endYear];
+      const change = Number.isFinite(start) && Number.isFinite(end) ? end - start : null;
+      return { groupKey, change };
+    })
+    .filter(item => item.change !== null)
+    .sort((a, b) => b.change - a.change);
+}
+
+/*
+  Whichever subgroup added the most people over that span. A dominantChange
+  <= 0 means no subgroup actually grew.
 */
 function computeDominantGroup(row, startYear, endYear) {
-  let dominantGroup = null;
-  let dominantChange = -Infinity;
-
-  Object.keys(GROWTH_GROUPS).forEach(groupKey => {
-    const start = row.values[groupKey]?.[startYear];
-    const end = row.values[groupKey]?.[endYear];
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-
-    const change = end - start;
-    if (change > dominantChange) {
-      dominantChange = change;
-      dominantGroup = groupKey;
-    }
-  });
-
-  return { dominantGroup, dominantChange };
+  const [top] = computeGroupChanges(row, startYear, endYear);
+  return top
+    ? { dominantGroup: top.groupKey, dominantChange: top.change }
+    : { dominantGroup: null, dominantChange: -Infinity };
 }
 
 function featureFips(feature) {
@@ -245,19 +249,15 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
     function showTooltip(event, feature) {
       const fips = featureFips(feature);
       const row = countyByFips.get(fips);
-      const dominance = dominantByFips.get(fips);
-      if (!row || !dominance) return;
+      if (!row) return;
 
-      let description;
-      if (dominance.dominantChange <= 0) {
-        description = `No population growth, ${currentStartYear}–${currentEndYear}`;
-      } else {
-        const startValue = row.values[dominance.dominantGroup]?.[currentStartYear];
-        const percentText = Number.isFinite(startValue) && startValue > 0
-          ? `, ${d3.format("+.1f")((dominance.dominantChange / startValue) * 100)}%`
-          : "";
-        description = `${escapeHTML(GROWTH_GROUPS[dominance.dominantGroup].label)} added the most people (${d3.format("+,")(dominance.dominantChange)}${percentText})`;
-      }
+      const changes = computeGroupChanges(row, currentStartYear, currentEndYear);
+      const changesList = changes
+        .map(({ groupKey, change }, i) => {
+          const line = `${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${d3.format("+,")(change)}`;
+          return i === 0 ? `<strong>${line}</strong>` : line;
+        })
+        .join("<br>");
 
       const totalPopulation = row.values.total?.[currentEndYear];
       const totalText = Number.isFinite(totalPopulation)
@@ -268,7 +268,7 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       tooltip.select("#tooltip-content").html(`
         <strong>${escapeHTML(row.countyName)}, ${escapeHTML(row.stateName)}</strong><br>
         ${totalText}
-        ${description}
+        ${changesList}
       `);
       positionTooltip(event);
     }
