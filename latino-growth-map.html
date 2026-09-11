@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Counties Where Latino Population Growth Led, 2020–2025</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    .map-header h1 {
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 400;
+      margin: 0 0 6px;
+    }
+
+    .growth-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin: 14px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .growth-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .growth-legend-swatch {
+      width: 12px;
+      height: 12px;
+      flex: none;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .growth-legend-scale {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .growth-legend-gradient {
+      width: 140px;
+      height: 12px;
+      border: 1px solid #aaa;
+    }
+  </style>
+</head>
+<body>
+  <main class="county-map-app">
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading county boundaries and population data…
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="visualization" class="visualization" hidden>
+      <div class="map-column">
+        <header class="map-header">
+          <h1>
+            Where Latino population growth was the largest source of county growth, between
+            <span class="inline-select-wrap">
+              <select id="start-year" class="inline-select" aria-label="Start year"></select>
+              <span class="inline-select-arrow" aria-hidden="true">▾</span>
+            </span>
+            and
+            <span class="inline-select-wrap">
+              <select id="end-year" class="inline-select" aria-label="End year"></select>
+              <span class="inline-select-arrow" aria-hidden="true">▾</span>
+            </span>
+          </h1>
+          <p id="status-text" aria-live="polite"></p>
+        </header>
+
+        <div class="map-wrap">
+          <svg
+            id="county-map"
+            viewBox="0 0 975 610"
+            role="img"
+            aria-label="Map of counties where Latino population growth was the largest source of growth"
+          ></svg>
+          <div id="tooltip" class="tooltip" aria-hidden="true">
+            <button type="button" id="tooltip-close" class="tooltip-close" aria-label="Close">&times;</button>
+            <div id="tooltip-content"></div>
+          </div>
+        </div>
+
+        <div class="growth-legend">
+          <span class="growth-legend-item">
+            <span class="growth-legend-scale">
+              Fewer added
+              <span id="growth-legend-gradient" class="growth-legend-gradient"></span>
+              More added
+            </span>
+            — Latino population was the largest source of growth
+          </span>
+          <span class="growth-legend-item">
+            <span class="growth-legend-swatch" style="background:#ededed;"></span>
+            Another group led, or the county did not grow
+          </span>
+        </div>
+
+        <p class="source-note">
+          Source: U.S. Census Bureau, Vintage 2025 county population estimates by race and Hispanic
+          origin.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script src="growth-map.js"></script>
+  <script>
+    renderGrowthMap({
+      groupKey: "latino",
+      groupLabel: "the Latino population",
+      highlightColor: "#E8531C"
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FY2026 Revenues vs. FY27 Budget</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    .chart-app {
+      width: min(860px, 100%);
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    #chart-wrap {
+      position: relative;
+    }
+
+    #chart {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .category-label {
+      font-size: 13px;
+      font-weight: 700;
+      fill: #111;
+    }
+
+    .tip-label {
+      font-size: 12px;
+      fill: var(--muted);
+    }
+
+    .segment-label {
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    .leader-line {
+      stroke: #111;
+      stroke-width: 1;
+    }
+
+    .external-label {
+      font-size: 11px;
+      fill: #111;
+      pointer-events: none;
+    }
+
+    .segment {
+      cursor: pointer;
+      transition: opacity 120ms ease;
+    }
+
+    .segment:hover,
+    .segment:focus-visible {
+      opacity: 0.85;
+      outline: none;
+    }
+
+    .chart-tooltip {
+      position: fixed;
+      z-index: 50;
+      max-width: 260px;
+      padding: 9px 11px;
+      border: 1px solid #000;
+      color: #111;
+      background: rgba(255, 255, 255, 0.98);
+      font-size: 12px;
+      line-height: 1.45;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .chart-tooltip strong {
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main class="chart-app">
+    <div id="chart-wrap">
+      <svg id="chart" role="img" aria-labelledby="chart-title chart-desc">
+        <title id="chart-title">FY2026 Revenues vs. FY27 Budget from Finance</title>
+        <desc id="chart-desc">A stacked bar chart comparing total FY2026 revenues, broken down by source, against the FY27 budget from Finance, broken down by category.</desc>
+      </svg>
+      <div class="chart-tooltip" id="tooltip"></div>
+    </div>
+  </main>
+
+  <script>
+    // ---------------------------------------------------------------------
+    // Data
+    // ---------------------------------------------------------------------
+    const RAW_DATA = [
+      { year: "FY2026 Revenues", type: "Individuals and families", amount: 73026512 },
+      { year: "FY2026 Revenues", type: "Foundations, corporations, and law firms", amount: 16736075 },
+      { year: "FY2026 Revenues", type: "Annual gala", amount: 1535170 },
+      { year: "FY27 Budget from Finance", type: "Programs", amount: 50144882 },
+      { year: "FY27 Budget from Finance", type: "Fundraising", amount: 6731190 },
+      { year: "FY27 Budget from Finance", type: "Leadership & Administration", amount: 12153301 }
+    ];
+
+    // Only 4 colors to work with (red, blue, gray, and the map's purple), so
+    // they repeat across the two bars — each bar's own 3 segments stay
+    // distinct from each other, which is what matters for reading a stack.
+    const CATEGORY_COLORS = new Map([
+      ["Individuals and families", "#111111"],
+      ["Foundations, corporations, and law firms", "#007194"],
+      ["Annual gala", "#767c7d"],
+      ["Programs", "#711471"],
+      ["Fundraising", "#ED1C24"],
+      ["Leadership & Administration", "#FFCF01"]
+    ]);
+
+    const YEARS = [...new Set(RAW_DATA.map(row => row.year))];
+
+    const formatFull = value => "$" + d3.format(",")(Math.round(value));
+    const formatPercent = fraction => Math.round(fraction * 100) + "%";
+    const formatTotal = value => "Total: $" + (value / 1e6).toFixed(1) + "M";
+
+    // Pick the in-segment label ink (white or dark) by whichever clears
+    // more contrast against the fill, per-color — a mid-tone hue like the
+    // palette's yellow or magenta reads better with dark ink than white.
+    function relativeLuminance(hex) {
+      const num = parseInt(hex.slice(1), 16);
+      const channels = [(num >> 16) & 255, (num >> 8) & 255, num & 255].map(c => {
+        c /= 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    }
+    const contrastRatio = (l1, l2) => {
+      const [a, b] = l1 > l2 ? [l1, l2] : [l2, l1];
+      return (a + 0.05) / (b + 0.05);
+    };
+    const INK_LUMINANCE = relativeLuminance("#111111");
+    function labelInkFor(hex) {
+      const fillLuminance = relativeLuminance(hex);
+      const whiteContrast = contrastRatio(fillLuminance, 1);
+      const inkContrast = contrastRatio(fillLuminance, INK_LUMINANCE);
+      return whiteContrast >= inkContrast ? "#fff" : "#111";
+    }
+
+    // ---------------------------------------------------------------------
+    // Layout
+    // ---------------------------------------------------------------------
+    const MARGIN = { top: 20, right: 20, bottom: 60, left: 20 };
+    const COLUMN_SLOT_WIDTH = 340;
+    const BAR_THICKNESS = 200;
+    const SEGMENT_GAP = 2;
+
+    const plotWidth = COLUMN_SLOT_WIDTH * YEARS.length;
+    const plotHeight = 320;
+    const WIDTH = MARGIN.left + plotWidth + MARGIN.right;
+    const HEIGHT = MARGIN.top + plotHeight + MARGIN.bottom;
+
+    const totalsByYear = new Map(
+      YEARS.map(year => [
+        year,
+        d3.sum(RAW_DATA.filter(row => row.year === year), row => row.amount)
+      ])
+    );
+    const maxTotal = d3.max(totalsByYear.values());
+
+    const yScale = d3.scaleLinear()
+      .domain([0, maxTotal])
+      .nice()
+      .range([plotHeight, 0]);
+
+    const xScale = d3.scaleBand()
+      .domain(YEARS)
+      .range([0, plotWidth])
+      .paddingInner(0);
+
+    // ---------------------------------------------------------------------
+    // Render
+    // ---------------------------------------------------------------------
+    const svg = d3.select("#chart")
+      .attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`);
+
+    const plot = svg.append("g")
+      .attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
+
+    const tooltip = d3.select("#tooltip");
+
+    function showTooltip(event, row, total) {
+      tooltip.style("opacity", 1)
+        .style("left", `${event.clientX + 14}px`)
+        .style("top", `${event.clientY + 14}px`);
+      tooltip.selectAll("*").remove();
+      tooltip.append("strong").text(formatPercent(row.amount / total));
+      tooltip.append("br");
+      tooltip.append("span").text(`${row.type} — ${row.year}`);
+    }
+
+    function moveTooltip(event) {
+      tooltip.style("left", `${event.clientX + 14}px`).style("top", `${event.clientY + 14}px`);
+    }
+
+    function hideTooltip() {
+      tooltip.style("opacity", 0);
+    }
+
+    YEARS.forEach(year => {
+      const rows = RAW_DATA.filter(row => row.year === year);
+      const bandLeft = xScale(year) + (COLUMN_SLOT_WIDTH - BAR_THICKNESS) / 2;
+      const total = totalsByYear.get(year);
+
+      // Category label below the column.
+      plot.append("text")
+        .attr("class", "category-label")
+        .attr("x", bandLeft + BAR_THICKNESS / 2)
+        .attr("y", plotHeight + 20)
+        .attr("text-anchor", "middle")
+        .text(year);
+
+      let cumulative = 0;
+      rows.forEach((row, i) => {
+        const y0 = yScale(cumulative);
+        const y1 = yScale(cumulative + row.amount);
+        cumulative += row.amount;
+
+        const isFirst = i === 0;
+        const isLast = i === rows.length - 1;
+        const insetBottom = isFirst ? 0 : SEGMENT_GAP / 2;
+        const insetTop = isLast ? 0 : SEGMENT_GAP / 2;
+        const y = y1 + insetTop;
+        const height = Math.max(y0 - insetBottom - y, 0);
+
+        const segment = plot.append("rect")
+          .attr("class", "segment")
+          .attr("x", bandLeft)
+          .attr("y", y)
+          .attr("width", BAR_THICKNESS)
+          .attr("height", height)
+          .attr("fill", CATEGORY_COLORS.get(row.type))
+          .attr("tabindex", 0)
+          .attr("role", "img")
+          .attr("aria-label", `${row.type}, ${year}: ${formatPercent(row.amount / total)}`)
+          .on("pointerenter pointermove focus", event => showTooltip(event, row, total))
+          .on("pointermove", moveTooltip)
+          .on("pointerleave blur", hideTooltip);
+
+        // Inside label, horizontal, name plus a bold percent-of-total — only
+        // if the segment is tall enough to hold a text line and the label
+        // fits the column width with padding — otherwise it's dropped in
+        // favor of an external label, per the "never clip a label" rule.
+        const cx = bandLeft + BAR_THICKNESS / 2;
+        const cy = y + height / 2;
+        const nameText = row.type;
+        const percentText = formatPercent(row.amount / total);
+        const maxLineWidth = BAR_THICKNESS - 12;
+        const lineHeight = 13;
+
+        const label = plot.append("text")
+          .attr("class", "segment-label")
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "middle")
+          .attr("fill", labelInkFor(CATEGORY_COLORS.get(row.type)));
+
+        // Try name + percent on one line first.
+        label.text(`${nameText} ${percentText}`);
+        const singleLineFits = height >= 18 && label.node().getComputedTextLength() <= maxLineWidth;
+
+        let lines = null;
+        if (singleLineFits) {
+          lines = [[{ text: `${nameText} `, bold: false }, { text: percentText, bold: true }]];
+        } else {
+          // Doesn't fit on one line — wrap the name across as few lines as
+          // the column width forces, then tack the percent onto the last
+          // line if it fits there, else give it its own line.
+          const words = nameText.split(" ");
+          const nameLines = [];
+          let current = "";
+          words.forEach(word => {
+            const candidate = current ? `${current} ${word}` : word;
+            label.text(candidate);
+            if (!current || label.node().getComputedTextLength() <= maxLineWidth) {
+              current = candidate;
+            } else {
+              nameLines.push(current);
+              current = word;
+            }
+          });
+          if (current) nameLines.push(current);
+
+          const lastIndex = nameLines.length - 1;
+          label.text(`${nameLines[lastIndex]} ${percentText}`);
+          const percentFitsLastLine = label.node().getComputedTextLength() <= maxLineWidth;
+
+          const candidateLines = nameLines.map((line, i) => (i === lastIndex && percentFitsLastLine)
+            ? [{ text: `${line} `, bold: false }, { text: percentText, bold: true }]
+            : [{ text: line, bold: false }]);
+          if (!percentFitsLastLine) {
+            candidateLines.push([{ text: percentText, bold: true }]);
+          }
+
+          const blockHeight = candidateLines.length * lineHeight;
+          const allLinesFit = candidateLines.every(tokens => {
+            label.text(tokens.map(t => t.text).join(""));
+            return label.node().getComputedTextLength() <= maxLineWidth;
+          });
+
+          if (candidateLines.length > 1 && height >= blockHeight + 8 && allLinesFit) {
+            lines = candidateLines;
+          }
+        }
+
+        if (lines) {
+          label.text(null);
+          const startY = cy - ((lines.length - 1) * lineHeight) / 2;
+          lines.forEach((tokens, i) => {
+            tokens.forEach((token, j) => {
+              const tspan = label.append("tspan").text(token.text);
+              if (j === 0) tspan.attr("x", cx).attr("y", startY + i * lineHeight);
+              if (token.bold) tspan.attr("font-weight", "700");
+            });
+          });
+        } else {
+          label.remove();
+
+          // Too thin a slice for an inline label — carry it outside the bar
+          // on a short leader line instead of dropping it silently.
+          const connectorStartX = bandLeft + BAR_THICKNESS;
+          const connectorEndX = connectorStartX + 16;
+          plot.append("line")
+            .attr("class", "leader-line")
+            .attr("x1", connectorStartX)
+            .attr("y1", cy)
+            .attr("x2", connectorEndX)
+            .attr("y2", cy);
+
+          const externalLabel = plot.append("text")
+            .attr("class", "external-label")
+            .attr("x", connectorEndX + 4)
+            .attr("y", cy)
+            .attr("text-anchor", "start")
+            .attr("dominant-baseline", "middle");
+          externalLabel.append("tspan").text(`${nameText} `);
+          externalLabel.append("tspan").attr("font-weight", "700").text(percentText);
+        }
+      });
+
+      // Total, below the category label under the bar.
+      plot.append("text")
+        .attr("class", "tip-label")
+        .attr("x", bandLeft + BAR_THICKNESS / 2)
+        .attr("y", plotHeight + 38)
+        .attr("text-anchor", "middle")
+        .text(formatTotal(total));
+    });
+  </script>
+</body>
+</html>

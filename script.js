@@ -39,9 +39,10 @@ const URBAN_RURAL_SLUG_TO_LABEL = {
   dropdown list; these back the overlay span shown when it's collapsed.
 */
 const SIGN_FILTER_LABELS = {
-  all: "increases and decreases",
+  all: "all changes, including no change",
   positive: "increase only",
-  negative: "decrease only"
+  negative: "decrease only",
+  zero: "no change"
 };
 
 const TYPE_FILTER_LABELS = {
@@ -229,7 +230,7 @@ function readURLState() {
     appState.division = division;
   }
   if (["count", "percent"].includes(metric)) appState.metric = metric;
-  if (["all", "positive", "negative"].includes(signFilter)) appState.signFilter = signFilter;
+  if (["all", "positive", "negative", "zero"].includes(signFilter)) appState.signFilter = signFilter;
   if (Number.isInteger(startYear) && startYear > 0) appState.startYear = startYear;
   if (Number.isInteger(endYear) && endYear > 0) appState.endYear = endYear;
 
@@ -632,6 +633,7 @@ function valueForCounty(row) {
 function matchesSignFilter(value) {
   if (appState.signFilter === "positive") return value > 0;
   if (appState.signFilter === "negative") return value < 0;
+  if (appState.signFilter === "zero") return value === 0;
   return true;
 }
 
@@ -645,7 +647,8 @@ function updateSignFilterOptions(geographyRows) {
   const counts = {
     all: values.filter(Number.isFinite).length,
     positive: values.filter(value => value > 0).length,
-    negative: values.filter(value => value < 0).length
+    negative: values.filter(value => value < 0).length,
+    zero: values.filter(value => value === 0).length
   };
 
   Object.entries(counts).forEach(([key, count]) => {
