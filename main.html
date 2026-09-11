@@ -140,7 +140,10 @@
 
         <div id="status" class="status">
           <span id="status-text" aria-live="polite"></span>
-          <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="county-table-wrap">Show table</button>
+          <span class="status-buttons">
+            <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="county-table-wrap">Show table</button>
+            <button type="button" id="county-table-export" class="county-table-toggle">Export CSV</button>
+          </span>
         </div>
 
         <section class="county-table-section" aria-label="Filtered counties">

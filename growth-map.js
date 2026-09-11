@@ -114,50 +114,28 @@ function buildCountyRecords(populationRows) {
 }
 
 /*
-  A group's value in either display unit: its raw change, or its share of
-  the county's total population change over the same span (undefined when
-  the total change is zero, since "share of nothing" isn't meaningful).
-*/
-function groupValue(row, groupKey, startYear, endYear, metric) {
-  const start = row.values[groupKey]?.[startYear];
-  const end = row.values[groupKey]?.[endYear];
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  const change = end - start;
-
-  if (metric === "percent") {
-    const totalStart = row.values.total?.[startYear];
-    const totalEnd = row.values.total?.[endYear];
-    if (!Number.isFinite(totalStart) || !Number.isFinite(totalEnd)) return null;
-    const totalChange = totalEnd - totalStart;
-    if (totalChange === 0) return null;
-    return (change / totalChange) * 100;
-  }
-  return change;
-}
-
-function formatGroupValue(value, metric) {
-  return metric === "percent" ? `${d3.format("+.1f")(value)}%` : d3.format("+,")(value);
-}
-
-/*
-  Every subgroup's value between startYear and endYear for one county,
+  Every subgroup's change between startYear and endYear for one county,
   sorted largest to smallest — the basis for both the dominant-group fill
   and the full per-group breakdown shown in the tooltip.
 */
-function computeGroupChanges(row, startYear, endYear, metric) {
+function computeGroupChanges(row, startYear, endYear) {
   return Object.keys(GROWTH_GROUPS)
-    .map(groupKey => ({ groupKey, change: groupValue(row, groupKey, startYear, endYear, metric) }))
+    .map(groupKey => {
+      const start = row.values[groupKey]?.[startYear];
+      const end = row.values[groupKey]?.[endYear];
+      const change = Number.isFinite(start) && Number.isFinite(end) ? end - start : null;
+      return { groupKey, change };
+    })
     .filter(item => item.change !== null)
     .sort((a, b) => b.change - a.change);
 }
 
 /*
-  Whichever subgroup added the most people (or the largest share of the
-  county's total change) over that span. A dominantChange <= 0 means no
-  subgroup actually grew.
+  Whichever subgroup added the most people over that span. A dominantChange
+  <= 0 means no subgroup actually grew.
 */
-function computeDominantGroup(row, startYear, endYear, metric) {
-  const [top] = computeGroupChanges(row, startYear, endYear, metric);
+function computeDominantGroup(row, startYear, endYear) {
+  const [top] = computeGroupChanges(row, startYear, endYear);
   return top
     ? { dominantGroup: top.groupKey, dominantChange: top.change }
     : { dominantGroup: null, dominantChange: -Infinity };
@@ -239,15 +217,13 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
     let dominantByFips = new Map();
     let currentStartYear = DEFAULT_START_YEAR;
     let currentEndYear = DEFAULT_END_YEAR;
-    let currentMetric = "count";
 
-    function updateFills(startYear, endYear, metric) {
+    function updateFills(startYear, endYear) {
       currentStartYear = startYear;
       currentEndYear = endYear;
-      currentMetric = metric;
 
       dominantByFips = new Map(countyRows.map(row =>
-        [row.fips, computeDominantGroup(row, startYear, endYear, metric)]
+        [row.fips, computeDominantGroup(row, startYear, endYear)]
       ));
 
       const dominantChanges = Array.from(dominantByFips.values())
@@ -275,10 +251,10 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       const row = countyByFips.get(fips);
       if (!row) return;
 
-      const changes = computeGroupChanges(row, currentStartYear, currentEndYear, currentMetric);
+      const changes = computeGroupChanges(row, currentStartYear, currentEndYear);
       const changesList = changes
         .map(({ groupKey, change }, i) => {
-          const line = `${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${formatGroupValue(change, currentMetric)}`;
+          const line = `${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${d3.format("+,")(change)}`;
           return i === 0 ? `<strong>${line}</strong>` : line;
         })
         .join("<br>");
@@ -352,33 +328,16 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       startSelect.addEventListener("change", () => {
         updateYearOptionAvailability();
         hideTooltip();
-        updateFills(Number(startSelect.value), Number(endSelect.value), currentMetric);
+        updateFills(Number(startSelect.value), Number(endSelect.value));
       });
       endSelect.addEventListener("change", () => {
         updateYearOptionAvailability();
         hideTooltip();
-        updateFills(Number(startSelect.value), Number(endSelect.value), currentMetric);
+        updateFills(Number(startSelect.value), Number(endSelect.value));
       });
     }
 
-    const metricButtons = document.querySelectorAll("#metric-controls button");
-    function setMetric(metric) {
-      if (metric === currentMetric) return;
-      metricButtons.forEach(b => b.classList.toggle("is-active", b.dataset.value === metric));
-      hideTooltip();
-      updateFills(currentStartYear, currentEndYear, metric);
-    }
-    metricButtons.forEach(button => {
-      button.addEventListener("click", () => setMetric(button.dataset.value));
-    });
-    const metricTrack = document.querySelector("#metric-controls .toggle-switch-track");
-    if (metricTrack) {
-      metricTrack.addEventListener("click", () => {
-        setMetric(currentMetric === "count" ? "percent" : "count");
-      });
-    }
-
-    updateFills(DEFAULT_START_YEAR, DEFAULT_END_YEAR, currentMetric);
+    updateFills(DEFAULT_START_YEAR, DEFAULT_END_YEAR);
 
     loading.hidden = true;
     visualization.hidden = false;

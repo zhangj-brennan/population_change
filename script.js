@@ -307,6 +307,7 @@ wireStaticControls();
 wireCountySearch();
 wireCountyTableSorting();
 wireCountyTableToggle();
+wireCountyTableExport();
 updateCountyTableVisibility();
 wireTooltipClose();
 loadData();
@@ -1124,6 +1125,52 @@ function wireCountyTableToggle() {
   });
 }
 
+/*
+  Exports exactly what the table shows (same filters, same sort) as a CSV
+  file, regardless of whether the table is currently open on screen.
+*/
+function wireCountyTableExport() {
+  const button = document.querySelector("#county-table-export");
+  if (!button) return;
+
+  button.addEventListener("click", () => {
+    const rows = computeCountyTableRows();
+
+    const header = [
+      "County", "State", "County type",
+      `Population ${appState.startYear}`, `Population ${appState.endYear}`,
+      "Count change", "Percent change"
+    ];
+
+    const lines = [header, ...rows.map(({ row, start, end, change, percent }) => {
+      const divisionLabel = row.description || (row.division ? capitalize(row.division.replace(/_/g, " ")) : "Unclassified");
+      return [
+        row.countyName,
+        row.stateName,
+        divisionLabel,
+        start,
+        end,
+        change,
+        percent === null ? "" : percent.toFixed(1)
+      ];
+    })].map(fields => fields.map(csvField).join(",")).join("\r\n");
+
+    const blob = new Blob([lines], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `county-population-change-${appState.startYear}-${appState.endYear}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+}
+
+function csvField(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
 function updateCountyTableVisibility() {
   const wrap = document.querySelector("#county-table-wrap");
   const button = document.querySelector("#county-table-toggle");
@@ -1134,6 +1181,24 @@ function updateCountyTableVisibility() {
     button.textContent = appState.tableVisible ? "Hide table" : "Show table";
     button.setAttribute("aria-expanded", String(appState.tableVisible));
   }
+}
+
+/*
+  Shared by the on-screen table and the CSV export, so both always agree on
+  exactly the same rows, in the same sort order.
+*/
+function computeCountyTableRows() {
+  const matchingRows = countyRows.filter(countyPassesActiveFilters);
+
+  return sortCountyTableRows(
+    matchingRows.map(row => {
+      const start = selectedPopulationValue(row, appState.startYear);
+      const end = selectedPopulationValue(row, appState.endYear);
+      const change = end - start;
+      const percent = start === 0 ? null : (change / start) * 100;
+      return { row, start, end, change, percent };
+    })
+  );
 }
 
 function updateCountyTable() {
@@ -1153,17 +1218,7 @@ function updateCountyTable() {
   document.querySelector("#county-table-start-year").textContent = appState.startYear;
   document.querySelector("#county-table-end-year").textContent = appState.endYear;
 
-  const matchingRows = countyRows.filter(countyPassesActiveFilters);
-
-  const rows = sortCountyTableRows(
-    matchingRows.map(row => {
-      const start = selectedPopulationValue(row, appState.startYear);
-      const end = selectedPopulationValue(row, appState.endYear);
-      const change = end - start;
-      const percent = start === 0 ? null : (change / start) * 100;
-      return { row, start, end, change, percent };
-    })
-  );
+  const rows = computeCountyTableRows();
 
   updateCountyTableSortIndicators();
 

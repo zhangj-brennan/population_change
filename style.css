@@ -430,6 +430,12 @@ select {
   font-size: 12px;
 }
 
+.status-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .controls-row {
   position: relative;
   z-index: 11;

@@ -54,6 +54,41 @@ function parseComponentsRow(row) {
   };
 }
 
+/*
+  Every factor's value for one county in one period, sorted largest to
+  smallest — the basis for both the dominant-factor fill and the tooltip.
+*/
+function computeFactorValues(row, period) {
+  return Object.keys(FACTORS)
+    .map(factorKey => ({ factorKey, value: row.values[period][factorKey] }))
+    .filter(item => Number.isFinite(item.value))
+    .sort((a, b) => b.value - a.value);
+}
+
+function computeDominantFactor(row, period) {
+  const [top] = computeFactorValues(row, period);
+  return top
+    ? { dominantFactor: top.factorKey, dominantValue: top.value }
+    : { dominantFactor: null, dominantValue: -Infinity };
+}
+
+/*
+  For a two-factor head-to-head (e.g. natural change vs. immigration): each
+  county goes to whichever of the two is bigger. A tie or two non-positive
+  values falls back to muted grey (neither factor actually grew the county).
+*/
+function computeTwoFactorWinner(row, period, factorAKey, factorBKey) {
+  const a = row.values[period][factorAKey];
+  const b = row.values[period][factorBKey];
+  const av = Number.isFinite(a) ? a : -Infinity;
+  const bv = Number.isFinite(b) ? b : -Infinity;
+
+  if (av <= 0 && bv <= 0) {
+    return { winner: null, value: Math.max(av, bv) };
+  }
+  return av >= bv ? { winner: factorAKey, value: av } : { winner: factorBKey, value: bv };
+}
+
 function featureFips(feature) {
   return String(feature.properties.GEOID).padStart(5, "0");
 }
@@ -65,62 +100,6 @@ function escapeHTML(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-/*
-  A factor's value in either display unit: the raw count, or its share of
-  the county's total population change over the same period (undefined when
-  the total is zero, since "share of nothing" isn't meaningful).
-*/
-function factorValue(row, period, factorKey, metric) {
-  const raw = row.values[period][factorKey];
-  if (!Number.isFinite(raw)) return null;
-  if (metric === "percent") {
-    const total = row.values[period].total;
-    if (!Number.isFinite(total) || total === 0) return null;
-    return (raw / total) * 100;
-  }
-  return raw;
-}
-
-function formatFactorValue(value, metric) {
-  return metric === "percent" ? `${d3.format("+.1f")(value)}%` : d3.format("+,")(value);
-}
-
-/*
-  Every factor's value for one county in one period, sorted largest to
-  smallest — the basis for both the dominant-factor fill and the tooltip.
-*/
-function computeFactorValues(row, period, metric) {
-  return Object.keys(FACTORS)
-    .map(factorKey => ({ factorKey, value: factorValue(row, period, factorKey, metric) }))
-    .filter(item => item.value !== null)
-    .sort((a, b) => b.value - a.value);
-}
-
-function computeDominantFactor(row, period, metric) {
-  const [top] = computeFactorValues(row, period, metric);
-  return top
-    ? { dominantFactor: top.factorKey, dominantValue: top.value }
-    : { dominantFactor: null, dominantValue: -Infinity };
-}
-
-/*
-  For a two-factor head-to-head (e.g. natural change vs. immigration): each
-  county goes to whichever of the two is bigger, in whichever unit (count or
-  percent of total change) is currently displayed. A tie or two non-positive
-  values falls back to muted grey (neither factor actually grew the county).
-*/
-function computeTwoFactorWinner(row, period, factorAKey, factorBKey, metric) {
-  const a = factorValue(row, period, factorAKey, metric);
-  const b = factorValue(row, period, factorBKey, metric);
-  const av = Number.isFinite(a) ? a : -Infinity;
-  const bv = Number.isFinite(b) ? b : -Infinity;
-
-  if (av <= 0 && bv <= 0) {
-    return { winner: null, value: Math.max(av, bv) };
-  }
-  return av >= bv ? { winner: factorAKey, value: av } : { winner: factorBKey, value: bv };
 }
 
 async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mutedColor = "#ededed" }) {
@@ -179,14 +158,12 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
 
     let dominantByFips = new Map();
     let currentPeriod = DEFAULT_PERIOD;
-    let currentMetric = "count";
 
-    function updateFills(period, metric) {
+    function updateFills(period) {
       currentPeriod = period;
-      currentMetric = metric;
 
       dominantByFips = new Map(componentsRows.map(row =>
-        [row.fips, computeDominantFactor(row, period, metric)]
+        [row.fips, computeDominantFactor(row, period)]
       ));
 
       const dominantValues = Array.from(dominantByFips.values())
@@ -214,10 +191,10 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
       const row = countyByFips.get(fips);
       if (!row) return;
 
-      const factorValues = computeFactorValues(row, currentPeriod, currentMetric);
+      const factorValues = computeFactorValues(row, currentPeriod);
       const factorList = factorValues
         .map(({ factorKey: key, value }, i) => {
-          const line = `${escapeHTML(FACTORS[key].label)}: ${formatFactorValue(value, currentMetric)}`;
+          const line = `${escapeHTML(FACTORS[key].label)}: ${d3.format("+,")(value)}`;
           return i === 0 ? `<strong>${line}</strong>` : line;
         })
         .join("<br>");
@@ -273,28 +250,11 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
       periodSelect.value = DEFAULT_PERIOD;
       periodSelect.addEventListener("change", () => {
         hideTooltip();
-        updateFills(periodSelect.value, currentMetric);
+        updateFills(periodSelect.value);
       });
     }
 
-    const metricButtons = document.querySelectorAll("#metric-controls button");
-    function setMetric(metric) {
-      if (metric === currentMetric) return;
-      metricButtons.forEach(b => b.classList.toggle("is-active", b.dataset.value === metric));
-      hideTooltip();
-      updateFills(currentPeriod, metric);
-    }
-    metricButtons.forEach(button => {
-      button.addEventListener("click", () => setMetric(button.dataset.value));
-    });
-    const metricTrack = document.querySelector("#metric-controls .toggle-switch-track");
-    if (metricTrack) {
-      metricTrack.addEventListener("click", () => {
-        setMetric(currentMetric === "count" ? "percent" : "count");
-      });
-    }
-
-    updateFills(DEFAULT_PERIOD, currentMetric);
+    updateFills(DEFAULT_PERIOD);
 
     loading.hidden = true;
     visualization.hidden = false;
@@ -386,22 +346,20 @@ async function renderTwoFactorMap({
 
     let winnerByFips = new Map();
     let currentPeriod = DEFAULT_PERIOD;
-    let currentMetric = "count";
 
-    function updateFills(period, metric) {
+    function updateFills(period) {
       currentPeriod = period;
-      currentMetric = metric;
 
       winnerByFips = new Map(componentsRows.map(row =>
-        [row.fips, computeTwoFactorWinner(row, period, factorAKey, factorBKey, metric)]
+        [row.fips, computeTwoFactorWinner(row, period, factorAKey, factorBKey)]
       ));
 
       const values = Array.from(winnerByFips.values());
       const maxA = d3.max(values.filter(d => d.winner === factorAKey), d => d.value) || 1;
       const maxB = d3.max(values.filter(d => d.winner === factorBKey), d => d.value) || 1;
 
-      if (legendMaxA) legendMaxA.textContent = formatFactorValue(maxA, metric);
-      if (legendMaxB) legendMaxB.textContent = formatFactorValue(maxB, metric);
+      if (legendMaxA) legendMaxA.textContent = d3.format("+,")(maxA);
+      if (legendMaxB) legendMaxB.textContent = d3.format("+,")(maxB);
 
       function fillFor(fips) {
         const result = winnerByFips.get(fips);
@@ -424,8 +382,8 @@ async function renderTwoFactorMap({
       const row = countyByFips.get(fips);
       if (!row) return;
 
-      const a = factorValue(row, currentPeriod, factorAKey, currentMetric);
-      const b = factorValue(row, currentPeriod, factorBKey, currentMetric);
+      const a = row.values[currentPeriod][factorAKey];
+      const b = row.values[currentPeriod][factorBKey];
       const lines = [
         { label: factorALabel, value: a },
         { label: factorBLabel, value: b }
@@ -433,7 +391,7 @@ async function renderTwoFactorMap({
         .filter(item => Number.isFinite(item.value))
         .sort((x, y) => y.value - x.value)
         .map(({ label, value }, i) => {
-          const line = `${escapeHTML(label)}: ${formatFactorValue(value, currentMetric)}`;
+          const line = `${escapeHTML(label)}: ${d3.format("+,")(value)}`;
           return i === 0 ? `<strong>${line}</strong>` : line;
         })
         .join("<br>");
@@ -489,28 +447,11 @@ async function renderTwoFactorMap({
       periodSelect.value = DEFAULT_PERIOD;
       periodSelect.addEventListener("change", () => {
         hideTooltip();
-        updateFills(periodSelect.value, currentMetric);
+        updateFills(periodSelect.value);
       });
     }
 
-    const metricButtons = document.querySelectorAll("#metric-controls button");
-    function setMetric(metric) {
-      if (metric === currentMetric) return;
-      metricButtons.forEach(b => b.classList.toggle("is-active", b.dataset.value === metric));
-      hideTooltip();
-      updateFills(currentPeriod, metric);
-    }
-    metricButtons.forEach(button => {
-      button.addEventListener("click", () => setMetric(button.dataset.value));
-    });
-    const metricTrack = document.querySelector("#metric-controls .toggle-switch-track");
-    if (metricTrack) {
-      metricTrack.addEventListener("click", () => {
-        setMetric(currentMetric === "count" ? "percent" : "count");
-      });
-    }
-
-    updateFills(DEFAULT_PERIOD, currentMetric);
+    updateFills(DEFAULT_PERIOD);
 
     loading.hidden = true;
     visualization.hidden = false;
