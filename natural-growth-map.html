@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Counties Where Asian Population Growth Led, 2020–2025</title>
+  <title>Counties Where Natural Change Led Growth, 2020–2025</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
@@ -65,14 +65,12 @@
       <div class="map-column">
         <header class="map-header">
           <h1>
-            Where Asian population growth was the largest source of county growth, when comparing
+            Where natural change was the largest factor of county growth, over the
             <span class="inline-select-wrap">
-              <select id="start-year" class="inline-select" aria-label="Start year"></select>
-              <span class="inline-select-arrow" aria-hidden="true">▾</span>
-            </span>
-            and
-            <span class="inline-select-wrap">
-              <select id="end-year" class="inline-select" aria-label="End year"></select>
+              <select id="period-select" class="inline-select" aria-label="Time period">
+                <option value="cumulative">2020–2025 period</option>
+                <option value="annual">most recent year (2024–2025)</option>
+              </select>
               <span class="inline-select-arrow" aria-hidden="true">▾</span>
             </span>
           </h1>
@@ -91,7 +89,7 @@
             id="county-map"
             viewBox="0 0 975 610"
             role="img"
-            aria-label="Map of counties where Asian population growth was the largest source of growth"
+            aria-label="Map of counties where natural change was the largest factor of population growth"
           ></svg>
           <div id="tooltip" class="tooltip" aria-hidden="true">
             <button type="button" id="tooltip-close" class="tooltip-close" aria-label="Close">&times;</button>
@@ -106,27 +104,27 @@
               <span id="growth-legend-gradient" class="growth-legend-gradient"></span>
               More added
             </span>
-            — Asian, non-Hispanic population was the largest source of growth
+            — natural change (births minus deaths) was the largest factor of growth
           </span>
           <span class="growth-legend-item">
             <span class="growth-legend-swatch" style="background:#ededed;"></span>
-            Another group led, or the county did not grow
+            Another factor led, or the county did not grow
           </span>
         </div>
 
         <p class="source-note">
-          Source: U.S. Census Bureau, Vintage 2025 county population estimates by race and Hispanic
-          origin.
+          Source: U.S. Census Bureau, Annual and Cumulative Estimates of the Components of Resident
+          Population Change for Counties, Vintage 2025 (CO-EST2025-COMP).
         </p>
       </div>
     </section>
   </main>
 
-  <script src="growth-map.js"></script>
+  <script src="components-map.js"></script>
   <script>
-    renderGrowthMap({
-      groupKey: "asian",
-      groupLabel: "the Asian, non-Hispanic population",
+    renderComponentsMap({
+      factorKey: "natural",
+      factorLabel: "natural change",
       highlightColor: "#711471"
     });
   </script>

@@ -47,6 +47,10 @@
       height: 12px;
       border: 1px solid #aaa;
     }
+
+    #metric-controls {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -73,6 +77,13 @@
             </span>
           </h1>
           <p id="status-text" aria-live="polite"></p>
+          <div class="toggle-switch" id="metric-controls">
+            <button type="button" class="is-active" data-value="count">Count</button>
+            <span class="toggle-switch-track" aria-hidden="true">
+              <span class="toggle-switch-knob"></span>
+            </span>
+            <button type="button" data-value="percent">Percent</button>
+          </div>
         </header>
 
         <div class="map-wrap">
@@ -116,7 +127,7 @@
     renderGrowthMap({
       groupKey: "latino",
       groupLabel: "the Latino population",
-      highlightColor: "#E8531C"
+      highlightColor: "#711471"
     });
   </script>
 </body>
