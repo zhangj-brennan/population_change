@@ -352,14 +352,14 @@ select {
 
 .county.is-filtered {
   fill: var(--inactive) !important;
-  opacity: 0.2;
 }
 
 .county.is-dimmed {
   opacity: 0.08;
 }
 
-.county-highlight-outline {
+.county-highlight-outline,
+.county-hover-outline {
   fill: none;
   stroke: #111;
   stroke-width: 2.5;

@@ -1283,6 +1283,8 @@ function showTooltip(event, feature) {
     return;
   }
 
+  showHoverOutline(feature);
+
   const start = selectedPopulationValue(row, appState.startYear);
   const end = selectedPopulationValue(row, appState.endYear);
 
@@ -1343,6 +1345,26 @@ function hideTooltip() {
   tooltip
     .style("opacity", 0)
     .attr("aria-hidden", "true");
+
+  hideHoverOutline();
+}
+
+/*
+  A thick outline drawn in highlightLayer (on top of both the county fills
+  and the white state borders) for whichever county is under the pointer —
+  a plain CSS :hover stroke on the county path itself would render *under*
+  the state-outline layer wherever a county sits on a state border.
+*/
+function showHoverOutline(feature) {
+  highlightLayer.selectAll(".county-hover-outline")
+    .data([feature])
+    .join("path")
+    .attr("class", "county-hover-outline")
+    .attr("d", path);
+}
+
+function hideHoverOutline() {
+  highlightLayer.selectAll(".county-hover-outline").remove();
 }
 
 /*

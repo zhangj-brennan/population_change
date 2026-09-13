@@ -47,6 +47,60 @@ const GROWTH_GROUPS = {
   }
 };
 
+const STATE_FIPS_TO_ABBR = {
+  "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO",
+  "09": "CT", "10": "DE", "11": "DC", "12": "FL", "13": "GA", "15": "HI",
+  "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY",
+  "22": "LA", "23": "ME", "24": "MD", "25": "MA", "26": "MI", "27": "MN",
+  "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
+  "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
+  "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
+  "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA",
+  "54": "WV", "55": "WI", "56": "WY"
+};
+
+const STATE_NAMES = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas",
+  CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii",
+  ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas",
+  KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
+  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma",
+  OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia",
+  WI: "Wisconsin", WY: "Wyoming"
+};
+
+const REGIONS = {
+  west: { label: "West", states: ["AK", "CA", "HI", "OR", "WA"] },
+  mountain: { label: "Mountain", states: ["AZ", "CO", "ID", "MT", "NM", "NV", "UT", "WY"] },
+  plains: { label: "Plains", states: ["IA", "KS", "MN", "MO", "ND", "NE", "SD"] },
+  midwest: { label: "Midwest", states: ["IL", "IN", "MI", "OH"] },
+  northeast: {
+    label: "Northeast",
+    states: ["CT", "DE", "MA", "MD", "ME", "NH", "NJ", "NY", "PA", "RI", "VT"]
+  },
+  south: {
+    label: "South",
+    states: ["AL", "AR", "FL", "GA", "KY", "LA", "MS", "NC", "OK", "SC", "TN", "TX", "VA", "WV"]
+  }
+};
+
+const ABBR_TO_STATE_FIPS = Object.fromEntries(
+  Object.entries(STATE_FIPS_TO_ABBR).map(([fips, abbreviation]) => [abbreviation, fips])
+);
+
+const REGION_STATE_FIPS = Object.fromEntries(
+  Object.entries(REGIONS).map(([regionKey, region]) => [
+    regionKey,
+    new Set(region.states.map(abbreviation => ABBR_TO_STATE_FIPS[abbreviation]))
+  ])
+);
+
 function numeric(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -145,6 +199,10 @@ function featureFips(feature) {
   return String(feature.properties.GEOID).padStart(5, "0");
 }
 
+function featureStateFips(feature) {
+  return String(feature.properties.STATEFP).padStart(2, "0");
+}
+
 function escapeHTML(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -152,6 +210,10 @@ function escapeHTML(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function csvField(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
 }
 
 async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColor = "#ededed" }) {
@@ -162,8 +224,14 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
   const tooltip = d3.select("#tooltip");
   const startSelect = document.querySelector("#start-year");
   const endSelect = document.querySelector("#end-year");
+  const stateSelect = document.querySelector("#state-select");
+  const regionSelect = document.querySelector("#region-select");
   const statusText = document.querySelector("#status-text");
   const legendGradient = document.querySelector("#growth-legend-gradient");
+  const tableToggle = document.querySelector("#county-table-toggle");
+  const tableExport = document.querySelector("#county-table-export");
+  const tableWrap = document.querySelector("#county-table-wrap");
+  const tableBody = document.querySelector("#county-table-body");
 
   try {
     const [geoJSON, statesGeoJSON, populationRows] = await Promise.all([
@@ -189,12 +257,29 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
     const countyLayer = svg.append("g").attr("class", "county-layer");
     const stateLayer = svg.append("g").attr("class", "state-layer");
+    const highlightLayer = svg.append("g").attr("class", "highlight-layer");
 
     const TINT_FLOOR_MIX = 0.6;
     const colorTint = d3.interpolateRgb(highlightColor, mutedColor)(TINT_FLOOR_MIX);
     const colorRamp = d3.interpolateRgb(colorTint, highlightColor);
     if (legendGradient) {
       legendGradient.style.background = `linear-gradient(90deg, ${colorTint}, ${highlightColor})`;
+    }
+
+    // A thick outline drawn in highlightLayer (above both the county fills
+    // and the white state borders) for whichever county is under the
+    // pointer — a plain CSS :hover stroke on the county path itself would
+    // render *under* the state-outline layer at a state border.
+    function showHoverOutline(feature) {
+      highlightLayer.selectAll(".county-hover-outline")
+        .data([feature])
+        .join("path")
+        .attr("class", "county-hover-outline")
+        .attr("d", path);
+    }
+
+    function hideHoverOutline() {
+      highlightLayer.selectAll(".county-hover-outline").remove();
     }
 
     const countySelection = countyLayer.selectAll("path")
@@ -217,6 +302,20 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
     let dominantByFips = new Map();
     let currentStartYear = DEFAULT_START_YEAR;
     let currentEndYear = DEFAULT_END_YEAR;
+    let selectedStateFips = null;
+    let selectedRegionKey = null;
+
+    // Whether a county falls outside the selected state/region — faded out
+    // (fill mixed toward white), not just its normal group color, so the
+    // fade is visible no matter what color the county would otherwise be.
+    function isOutOfScope(row) {
+      if (!row) return false;
+      if (selectedStateFips) return row.stateFips !== selectedStateFips;
+      if (selectedRegionKey) return !REGION_STATE_FIPS[selectedRegionKey].has(row.stateFips);
+      return false;
+    }
+
+    const OUT_OF_SCOPE_FADE_MIX = 0.88;
 
     function updateFills(startYear, endYear) {
       currentStartYear = startYear;
@@ -226,23 +325,45 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
         [row.fips, computeDominantGroup(row, startYear, endYear)]
       ));
 
-      const dominantChanges = Array.from(dominantByFips.values())
+      // The color scale's max is scoped to the selected state/region (like
+      // the main map) so the most extreme county *in view* always reads as
+      // the darkest color, rather than being washed out by a nationwide max.
+      const geographyRows = countyRows.filter(row => {
+        if (selectedStateFips) return row.stateFips === selectedStateFips;
+        if (selectedRegionKey) return REGION_STATE_FIPS[selectedRegionKey].has(row.stateFips);
+        return true;
+      });
+
+      const dominantChanges = geographyRows
+        .map(row => dominantByFips.get(row.fips))
         .filter(d => d.dominantChange > 0 && d.dominantGroup === groupKey)
         .map(d => d.dominantChange);
       const maxDominantChange = d3.max(dominantChanges) || 1;
 
       function fillFor(fips) {
         const dominance = dominantByFips.get(fips);
-        if (!dominance || dominance.dominantChange <= 0 || dominance.dominantGroup !== groupKey) {
-          return mutedColor;
+        const baseColor = (!dominance || dominance.dominantChange <= 0 || dominance.dominantGroup !== groupKey)
+          ? mutedColor
+          : colorRamp(Math.min(dominance.dominantChange / maxDominantChange, 1));
+
+        if (isOutOfScope(countyByFips.get(fips))) {
+          return d3.interpolateRgb(baseColor, "#ffffff")(OUT_OF_SCOPE_FADE_MIX);
         }
-        return colorRamp(Math.min(dominance.dominantChange / maxDominantChange, 1));
+        return baseColor;
       }
 
-      countySelection.attr("fill", feature => fillFor(featureFips(feature)));
+      countySelection
+        .attr("fill", feature => fillFor(featureFips(feature)))
+        .classed("is-out-of-scope", feature => isOutOfScope(countyByFips.get(featureFips(feature))));
 
       if (statusText) {
-        statusText.textContent = `${d3.format(",")(dominantChanges.length)} counties where ${groupLabel} was the largest source of population growth, ${startYear}–${endYear}`;
+        const geographyLabel = selectedStateFips
+          ? STATE_NAMES[STATE_FIPS_TO_ABBR[selectedStateFips]]
+          : selectedRegionKey
+            ? REGIONS[selectedRegionKey].label
+            : null;
+        const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
+        statusText.textContent = `${d3.format(",")(dominantChanges.length)} counties${geographySuffix} where ${groupLabel} was the largest source of population growth, ${startYear}–${endYear}`;
       }
     }
 
@@ -250,6 +371,16 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       const fips = featureFips(feature);
       const row = countyByFips.get(fips);
       if (!row) return;
+
+      if (
+        (selectedStateFips && row.stateFips !== selectedStateFips) ||
+        (selectedRegionKey && !REGION_STATE_FIPS[selectedRegionKey].has(row.stateFips))
+      ) {
+        hideTooltip();
+        return;
+      }
+
+      showHoverOutline(feature);
 
       const changes = computeGroupChanges(row, currentStartYear, currentEndYear);
       const changesList = changes
@@ -296,6 +427,7 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
     function hideTooltip() {
       tooltip.style("opacity", 0).attr("aria-hidden", "true");
+      hideHoverOutline();
     }
 
     const tooltipCloseButton = document.querySelector("#tooltip-close");
@@ -334,6 +466,84 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
         updateYearOptionAvailability();
         hideTooltip();
         updateFills(Number(startSelect.value), Number(endSelect.value));
+      });
+    }
+
+    // State/region dropdowns — pan+zoom to the selected geography and scope
+    // the color scale to it, same behavior as the main map.
+    const ZOOM_TRANSITION_DURATION_MS = 650;
+    const ZOOM_RESET_DURATION_MS = 550;
+
+    function zoomToStateFips(stateFipsList) {
+      if (!stateFipsList.length) {
+        countyLayer.transition().duration(ZOOM_RESET_DURATION_MS).style("transform", null);
+        stateLayer.transition().duration(ZOOM_RESET_DURATION_MS).style("transform", null);
+        highlightLayer.transition().duration(ZOOM_RESET_DURATION_MS).style("transform", null);
+        return;
+      }
+
+      const selectedFeatures = stateFeatures.filter(feature =>
+        stateFipsList.includes(featureStateFips(feature))
+      );
+      if (!selectedFeatures.length) return;
+
+      const featureCollection = { type: "FeatureCollection", features: selectedFeatures };
+      const [[x0, y0], [x1, y1]] = path.bounds(featureCollection);
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const x = (x0 + x1) / 2;
+      const y = (y0 + y1) / 2;
+      const scale = Math.max(1, Math.min(8, 0.82 / Math.max(dx / 975, dy / 610)));
+
+      const transform =
+        `translate(${975 / 2}px,${610 / 2}px) scale(${scale}) translate(${-x}px,${-y}px)`;
+
+      countyLayer.transition().duration(ZOOM_TRANSITION_DURATION_MS).style("transform", transform);
+      stateLayer.transition().duration(ZOOM_TRANSITION_DURATION_MS).style("transform", transform);
+      highlightLayer.transition().duration(ZOOM_TRANSITION_DURATION_MS).style("transform", transform);
+    }
+
+    function selectState(stateFips) {
+      selectedStateFips = stateFips;
+      if (stateFips) selectedRegionKey = null;
+      if (stateSelect) stateSelect.value = stateFips || "";
+      if (regionSelect) regionSelect.value = "";
+
+      zoomToStateFips(stateFips ? [stateFips] : []);
+      updateFills(currentStartYear, currentEndYear);
+    }
+
+    function selectRegion(regionKey) {
+      selectedRegionKey = regionKey;
+      if (regionKey) selectedStateFips = null;
+      if (regionSelect) regionSelect.value = regionKey || "";
+      if (stateSelect) stateSelect.value = "";
+
+      const stateFipsList = regionKey ? Array.from(REGION_STATE_FIPS[regionKey]) : [];
+      zoomToStateFips(stateFipsList);
+      updateFills(currentStartYear, currentEndYear);
+    }
+
+    if (stateSelect) {
+      Object.entries(STATE_FIPS_TO_ABBR)
+        .map(([fips, abbreviation]) => ({ fips, abbreviation }))
+        .sort((a, b) => d3.ascending(STATE_NAMES[a.abbreviation], STATE_NAMES[b.abbreviation]))
+        .forEach(state => stateSelect.add(new Option(STATE_NAMES[state.abbreviation], state.fips)));
+
+      stateSelect.addEventListener("change", () => {
+        hideTooltip();
+        selectState(stateSelect.value || null);
+      });
+    }
+
+    if (regionSelect) {
+      Object.entries(REGIONS).forEach(([regionKey, region]) => {
+        regionSelect.add(new Option(region.label, regionKey));
+      });
+
+      regionSelect.addEventListener("change", () => {
+        hideTooltip();
+        selectRegion(regionSelect.value || null);
       });
     }
 

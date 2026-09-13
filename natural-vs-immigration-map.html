@@ -52,6 +52,18 @@
       white-space: nowrap;
     }
 
+    .geo-controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      max-width: 460px;
+    }
+
+    .geo-controls-row .state-select-label {
+      flex: 1 1 160px;
+    }
+
   </style>
 </head>
 <body>
@@ -77,6 +89,22 @@
           </h1>
           <p id="status-text" aria-live="polite"></p>
         </header>
+
+        <div class="geo-controls-row">
+          <label class="state-select-label" for="state-select">
+            <span class="control-label">Select a state</span>
+            <select id="state-select" aria-label="Select a state">
+              <option value="">All states</option>
+            </select>
+          </label>
+
+          <label class="state-select-label" for="region-select">
+            <span class="control-label">Select a region</span>
+            <select id="region-select" aria-label="Select a region">
+              <option value="">All regions</option>
+            </select>
+          </label>
+        </div>
 
         <div class="map-wrap">
           <svg
