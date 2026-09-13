@@ -60,6 +60,10 @@
       flex: 1 1 160px;
     }
 
+    .county-table th {
+      padding: 7px 8px;
+    }
+
   </style>
 </head>
 <body>
@@ -130,6 +134,26 @@
             <span class="growth-legend-swatch" style="background:#ededed;"></span>
             Another group led, or the county did not grow
           </span>
+        </div>
+
+        <div class="status-buttons">
+          <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="county-table-wrap">Show table</button>
+          <button type="button" id="county-table-export" class="county-table-toggle">Export CSV</button>
+        </div>
+
+        <div class="county-table-wrap" id="county-table-wrap" hidden>
+          <table class="county-table" id="county-table">
+            <thead>
+              <tr>
+                <th>County</th>
+                <th>State</th>
+                <th>Largest group</th>
+                <th class="numeric">Change</th>
+                <th class="numeric">Total population</th>
+              </tr>
+            </thead>
+            <tbody id="county-table-body"></tbody>
+          </table>
         </div>
 
         <p class="source-note">

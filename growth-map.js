@@ -365,6 +365,79 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
         statusText.textContent = `${d3.format(",")(dominantChanges.length)} counties${geographySuffix} where ${groupLabel} was the largest source of population growth, ${startYear}–${endYear}`;
       }
+
+      updateTable();
+    }
+
+    // Table + CSV export — same rows either way: every in-scope county,
+    // sorted by its largest group's change, largest first.
+    function computeTableRows() {
+      return countyRows
+        .filter(row => !isOutOfScope(row))
+        .map(row => ({ row, dominance: dominantByFips.get(row.fips) }))
+        .sort((a, b) => (b.dominance?.dominantChange ?? -Infinity) - (a.dominance?.dominantChange ?? -Infinity));
+    }
+
+    function updateTable() {
+      if (!tableBody || tableWrap?.hidden) return;
+
+      const rows = computeTableRows();
+
+      if (!rows.length) {
+        tableBody.innerHTML = `
+          <tr><td colspan="5" class="county-table-empty">No counties match the current filters.</td></tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = rows.map(({ row, dominance }) => {
+        const groupLabelText = dominance?.dominantGroup ? GROWTH_GROUPS[dominance.dominantGroup].label : "None";
+        const totalPopulation = row.values.total?.[currentEndYear];
+        return `
+          <tr>
+            <td>${escapeHTML(row.countyName)}</td>
+            <td>${escapeHTML(row.stateName)}</td>
+            <td>${escapeHTML(groupLabelText)}</td>
+            <td class="numeric">${Number.isFinite(dominance?.dominantChange) ? d3.format("+,")(dominance.dominantChange) : "N/A"}</td>
+            <td class="numeric">${Number.isFinite(totalPopulation) ? d3.format(",")(totalPopulation) : "N/A"}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    if (tableToggle && tableWrap) {
+      tableToggle.addEventListener("click", () => {
+        const isHidden = tableWrap.hidden;
+        tableWrap.hidden = !isHidden;
+        tableToggle.textContent = isHidden ? "Hide table" : "Show table";
+        tableToggle.setAttribute("aria-expanded", String(isHidden));
+        if (isHidden) updateTable();
+      });
+    }
+
+    if (tableExport) {
+      tableExport.addEventListener("click", () => {
+        const rows = computeTableRows();
+        const header = ["County", "State", "Largest group", "Change", `Total population (${currentEndYear})`];
+
+        const lines = [header, ...rows.map(({ row, dominance }) => [
+          row.countyName,
+          row.stateName,
+          dominance?.dominantGroup ? GROWTH_GROUPS[dominance.dominantGroup].label : "None",
+          Number.isFinite(dominance?.dominantChange) ? dominance.dominantChange : "",
+          row.values.total?.[currentEndYear] ?? ""
+        ])].map(fields => fields.map(csvField).join(",")).join("\r\n");
+
+        const blob = new Blob([lines], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${groupKey}-growth-${currentStartYear}-${currentEndYear}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      });
     }
 
     function showTooltip(event, feature) {
