@@ -476,8 +476,13 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
       showHoverOutline(feature);
 
-      const ownChange = row.values[groupKey]?.[currentEndYear] - row.values[groupKey]?.[currentStartYear];
-      const changesList = `<strong>${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${d3.format("+,")(ownChange)}</strong>`;
+      const changes = computeGroupChanges(row, currentStartYear, currentEndYear);
+      const changesList = changes
+        .map(({ groupKey: rowGroupKey, change }) => {
+          const line = `${escapeHTML(GROWTH_GROUPS[rowGroupKey].label)}: ${d3.format("+,")(change)}`;
+          return rowGroupKey === groupKey ? `<strong>${line}</strong>` : line;
+        })
+        .join("<br>");
 
       const totalPopulation = row.values.total?.[currentEndYear];
       const totalText = Number.isFinite(totalPopulation)
