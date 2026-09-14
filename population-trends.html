@@ -169,6 +169,17 @@
               <option value="">All urban/rural types</option>
             </select>
           </label>
+
+          <label class="state-select-label">
+            <span class="control-label">Value type</span>
+            <div class="toggle-switch" id="value-type-toggle">
+              <button type="button" data-value="count">Raw count</button>
+              <span class="toggle-switch-track" aria-hidden="true">
+                <span class="toggle-switch-knob"></span>
+              </span>
+              <button type="button" class="is-active" data-value="percent">Percentage share</button>
+            </div>
+          </label>
         </div>
 
         <div class="chart-wrap" id="chart-wrap">

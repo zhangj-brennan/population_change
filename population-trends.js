@@ -241,11 +241,25 @@ async function renderPopulationTrendChart() {
       .x(d => xScale(d.year))
       .y(d => yScale(d.value));
 
-    // Value plotted is the subgroup's share of the county's total population
+    // "percent" plots the subgroup's share of the county's total population
     // (0-1), minus that same share in 2020 — every line starts at 0 in 2020
     // and shows the percentage-point change since then, so counties of very
-    // different sizes are comparable on one y-axis.
+    // different sizes are comparable on one y-axis. "count" instead plots
+    // the raw population change since 2020.
     function seriesForRow(row, groupKey) {
+      if (valueType === "count") {
+        const baseline = row.values[groupKey]?.[YEARS[0]];
+        return YEARS.map(year => {
+          const current = row.values[groupKey]?.[year];
+          return {
+            year,
+            value: Number.isFinite(baseline) && Number.isFinite(current)
+              ? current - baseline
+              : undefined
+          };
+        });
+      }
+
       const shareSeries = YEARS.map(year => {
         const total = row.values.total?.[year];
         const subgroup = row.values[groupKey]?.[year];
@@ -271,6 +285,11 @@ async function renderPopulationTrendChart() {
     let selectedStateFips = null;
     let selectedRegionKey = null;
     let selectedUrbanRuralType = null;
+    let valueType = "percent";
+
+    function valueFormat() {
+      return valueType === "percent" ? d3.format("+.2%") : d3.format("+,");
+    }
 
     function inScope(row) {
       if (selectedStateFips && row.stateFips !== selectedStateFips) return false;
@@ -308,7 +327,7 @@ async function renderPopulationTrendChart() {
         d3.axisBottom(xScale).tickValues(YEARS).tickFormat(d3.format("d")).tickSize(-innerHeight)
       );
       yAxisG.call(
-        d3.axisLeft(yScale).ticks(6).tickFormat(d3.format("+.2%")).tickSize(-innerWidth)
+        d3.axisLeft(yScale).ticks(6).tickFormat(valueFormat()).tickSize(-innerWidth)
       );
 
       pathByFips = new Map();
@@ -393,8 +412,9 @@ async function renderPopulationTrendChart() {
       const urbanRuralSuffix = selectedUrbanRuralType
         ? ` (${selectedUrbanRuralType.replace(/^\d+\s*-\s*/, "")})`
         : "";
+      const metricLabel = valueType === "percent" ? "share of total population" : "population";
       statusText.textContent =
-        `${visibleRows.length.toLocaleString()} counties${geographySuffix}${urbanRuralSuffix} — change in ${groupLabel} share of total population since 2020`;
+        `${visibleRows.length.toLocaleString()} counties${geographySuffix}${urbanRuralSuffix} — change in ${groupLabel} ${metricLabel} since 2020`;
     }
 
     function nearestCounty(mouseX, mouseY) {
@@ -464,8 +484,9 @@ async function renderPopulationTrendChart() {
           .style("opacity", 1)
           .raise();
 
+        const format = valueFormat();
         const lines = seriesByFips.get(fips)
-          .map(d => `${d.year}: ${Number.isFinite(d.value) ? d3.format("+.2%")(d.value) : "N/A"}`)
+          .map(d => `${d.year}: ${Number.isFinite(d.value) ? format(d.value) : "N/A"}`)
           .join("<br>");
 
         tooltip.style("opacity", 1).attr("aria-hidden", "false");
@@ -557,6 +578,28 @@ async function renderPopulationTrendChart() {
         hideHover();
         selectedUrbanRuralType = urbanRuralSelect.value || null;
         render(currentGroupKey);
+      });
+    }
+
+    const valueTypeToggle = document.querySelector("#value-type-toggle");
+
+    function selectValueType(type) {
+      valueType = type;
+      if (valueTypeToggle) {
+        d3.select(valueTypeToggle).selectAll("button")
+          .classed("is-active", function () { return this.dataset.value === valueType; });
+      }
+      hideHover();
+      render(currentGroupKey);
+    }
+
+    if (valueTypeToggle) {
+      d3.select(valueTypeToggle).selectAll("button").on("click", function () {
+        selectValueType(this.dataset.value);
+      });
+
+      valueTypeToggle.querySelector(".toggle-switch-track").addEventListener("click", () => {
+        selectValueType(valueType === "count" ? "percent" : "count");
       });
     }
 
