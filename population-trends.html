@@ -25,6 +25,10 @@
       flex: 1 1 160px;
     }
 
+    .value-type-row {
+      margin-top: 14px;
+    }
+
     .chart-wrap {
       position: relative;
       z-index: auto;
@@ -169,9 +173,10 @@
               <option value="">All urban/rural types</option>
             </select>
           </label>
+        </div>
 
+        <div class="value-type-row">
           <label class="state-select-label">
-            <span class="control-label">Value type</span>
             <div class="toggle-switch" id="value-type-toggle">
               <button type="button" data-value="count">Raw count</button>
               <span class="toggle-switch-track" aria-hidden="true">
