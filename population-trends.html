@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>County Population Trends, 2020–2025 TEST ONLY</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    .map-header h1 {
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 400;
+      margin: 0 0 6px;
+    }
+
+    .geo-controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .geo-controls-row .state-select-label {
+      flex: 1 1 160px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      z-index: auto;
+      min-width: 0;
+      overflow: hidden;
+      margin-top: 18px;
+    }
+
+    #trend-chart {
+      display: block;
+      width: 100%;
+      aspect-ratio: 975 / 560;
+      overflow: visible;
+    }
+
+    .growth-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin: 14px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .growth-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .growth-legend-swatch {
+      width: 12px;
+      height: 3px;
+      flex: none;
+    }
+
+    .trend-line-base {
+      stroke-width: 1.6;
+      opacity: 0.2;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .trend-line-highlight {
+      stroke: #111;
+      stroke-width: 2.2;
+      opacity: 0;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+
+    .trend-overlay {
+      fill: transparent;
+    }
+
+    .trend-axis text {
+      fill: var(--muted);
+      font-size: 10px;
+    }
+
+    .trend-axis path {
+      display: none;
+    }
+
+    .trend-axis line {
+      stroke: #111;
+      stroke-width: 0.5;
+      opacity: 0.25;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .trend-year-count-increase,
+    .trend-year-count-decrease,
+    .trend-year-count-nochange {
+      text-anchor: middle;
+      font-size: 10px;
+      font-weight: 700;
+      pointer-events: none;
+      paint-order: stroke;
+      stroke: #fff;
+      stroke-width: 3px;
+      stroke-linejoin: round;
+    }
+
+    .trend-year-count-increase {
+      fill: #711471;
+    }
+
+    .trend-year-count-decrease {
+      fill: #F5A623;
+    }
+
+    .trend-year-count-nochange {
+      fill: #999;
+    }
+  </style>
+</head>
+<body>
+  <main class="county-map-app">
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading county population data…
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="visualization" class="visualization" hidden>
+      <div class="map-column">
+        <header class="map-header">
+          <h1>County population trends, 2020–2025</h1>
+          <p id="status-text" aria-live="polite"></p>
+        </header>
+
+        <div class="geo-controls-row">
+          <label class="state-select-label" for="series-select">
+            <span class="control-label">Population group</span>
+            <select id="series-select" aria-label="Population group">
+              <option value="white">White, non-Hispanic</option>
+              <option value="black">Black, non-Hispanic</option>
+              <option value="latino">Latino</option>
+              <option value="asian">Asian, non-Hispanic</option>
+              <option value="native">American Indian/Alaska Native, non-Hispanic</option>
+              <option value="pacific">Native Hawaiian/Pacific Islander, non-Hispanic</option>
+            </select>
+          </label>
+
+          <label class="state-select-label" for="state-select">
+            <span class="control-label">Select a state</span>
+            <select id="state-select" aria-label="Select a state">
+              <option value="">All states</option>
+            </select>
+          </label>
+
+          <label class="state-select-label" for="region-select">
+            <span class="control-label">Select a region</span>
+            <select id="region-select" aria-label="Select a region">
+              <option value="">All regions</option>
+            </select>
+          </label>
+
+          <label class="state-select-label" for="urban-rural-select">
+            <span class="control-label">Urban/rural type</span>
+            <select id="urban-rural-select" aria-label="Urban/rural classification">
+              <option value="">All urban/rural types</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="chart-wrap" id="chart-wrap">
+          <svg
+            id="trend-chart"
+            viewBox="0 0 975 560"
+            role="img"
+            aria-label="Line chart of county population by year, 2020 to 2025, one line per county"
+          ></svg>
+          <div id="tooltip" class="tooltip" aria-hidden="true">
+            <div id="tooltip-content"></div>
+          </div>
+        </div>
+
+        <div class="growth-legend">
+          <span class="growth-legend-item">
+            <span class="growth-legend-swatch" style="background:#711471;"></span>
+            Share increased since 2020
+          </span>
+          <span class="growth-legend-item">
+            <span class="growth-legend-swatch" style="background:#F5A623;"></span>
+            Share decreased since 2020
+          </span>
+        </div>
+
+        <p class="source-note">
+          Source: U.S. Census Bureau, Vintage 2025 county population estimates by race and Hispanic
+          origin. Hover over a line to identify a county.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script src="population-trends.js"></script>
+</body>
+</html>
