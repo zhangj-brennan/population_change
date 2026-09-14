@@ -434,6 +434,8 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .controls-row {
@@ -632,7 +634,7 @@ select {
 }
 
 .county-table-toggle {
-  padding: 10px 18px;
+  padding: 4px 10px;
   border: 1px solid #777;
   border-radius: 0;
   color: #111;
@@ -730,6 +732,12 @@ select {
 .county-table th:nth-child(3) {
   min-width: 130px;
   max-width: 160px;
+  white-space: normal;
+}
+
+.county-table th:nth-child(6),
+.county-table th:nth-child(7) {
+  max-width: 90px;
   white-space: normal;
 }
 

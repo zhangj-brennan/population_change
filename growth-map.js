@@ -232,6 +232,8 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
   const tableExport = document.querySelector("#county-table-export");
   const tableWrap = document.querySelector("#county-table-wrap");
   const tableBody = document.querySelector("#county-table-body");
+  const tableColStartPop = document.querySelector("#county-table-col-start-pop");
+  const tableColEndPop = document.querySelector("#county-table-col-end-pop");
 
   try {
     const [geoJSON, statesGeoJSON, populationRows] = await Promise.all([
@@ -317,9 +319,16 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
     const OUT_OF_SCOPE_FADE_MIX = 0.88;
 
+    function updateTableHeaders() {
+      const groupLabel = escapeHTML(GROWTH_GROUPS[groupKey].label);
+      if (tableColStartPop) tableColStartPop.innerHTML = `${groupLabel}<br>population (${currentStartYear})`;
+      if (tableColEndPop) tableColEndPop.innerHTML = `${groupLabel}<br>population (${currentEndYear})`;
+    }
+
     function updateFills(startYear, endYear) {
       currentStartYear = startYear;
       currentEndYear = endYear;
+      updateTableHeaders();
 
       dominantByFips = new Map(countyRows.map(row =>
         [row.fips, computeDominantGroup(row, startYear, endYear)]
@@ -369,12 +378,14 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       updateTable();
     }
 
-    // Table + CSV export — same rows either way: every in-scope county,
-    // sorted by its largest group's change, largest first.
+    // Table + CSV export — same rows either way: every in-scope county
+    // where the page's own group is the largest source of growth, sorted
+    // by that group's change, largest first.
     function computeTableRows() {
       return countyRows
         .filter(row => !isOutOfScope(row))
         .map(row => ({ row, dominance: dominantByFips.get(row.fips) }))
+        .filter(({ dominance }) => dominance?.dominantGroup === groupKey)
         .sort((a, b) => (b.dominance?.dominantChange ?? -Infinity) - (a.dominance?.dominantChange ?? -Infinity));
     }
 
@@ -385,7 +396,7 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
       if (!rows.length) {
         tableBody.innerHTML = `
-          <tr><td colspan="5" class="county-table-empty">No counties match the current filters.</td></tr>
+          <tr><td colspan="7" class="county-table-empty">No counties match the current filters.</td></tr>
         `;
         return;
       }
@@ -393,6 +404,8 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
       tableBody.innerHTML = rows.map(({ row, dominance }) => {
         const groupLabelText = dominance?.dominantGroup ? GROWTH_GROUPS[dominance.dominantGroup].label : "None";
         const totalPopulation = row.values.total?.[currentEndYear];
+        const startGroupPopulation = row.values[groupKey]?.[currentStartYear];
+        const endGroupPopulation = row.values[groupKey]?.[currentEndYear];
         return `
           <tr>
             <td>${escapeHTML(row.countyName)}</td>
@@ -400,6 +413,8 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
             <td>${escapeHTML(groupLabelText)}</td>
             <td class="numeric">${Number.isFinite(dominance?.dominantChange) ? d3.format("+,")(dominance.dominantChange) : "N/A"}</td>
             <td class="numeric">${Number.isFinite(totalPopulation) ? d3.format(",")(totalPopulation) : "N/A"}</td>
+            <td class="numeric">${Number.isFinite(startGroupPopulation) ? d3.format(",")(startGroupPopulation) : "N/A"}</td>
+            <td class="numeric">${Number.isFinite(endGroupPopulation) ? d3.format(",")(endGroupPopulation) : "N/A"}</td>
           </tr>
         `;
       }).join("");
@@ -418,14 +433,20 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
     if (tableExport) {
       tableExport.addEventListener("click", () => {
         const rows = computeTableRows();
-        const header = ["County", "State", "Largest group", "Change", `Total population (${currentEndYear})`];
+        const groupLabel = GROWTH_GROUPS[groupKey].label;
+        const header = [
+          "County", "State", "Largest group", "Change", `Total population (${currentEndYear})`,
+          `${groupLabel} population (${currentStartYear})`, `${groupLabel} population (${currentEndYear})`
+        ];
 
         const lines = [header, ...rows.map(({ row, dominance }) => [
           row.countyName,
           row.stateName,
           dominance?.dominantGroup ? GROWTH_GROUPS[dominance.dominantGroup].label : "None",
           Number.isFinite(dominance?.dominantChange) ? dominance.dominantChange : "",
-          row.values.total?.[currentEndYear] ?? ""
+          row.values.total?.[currentEndYear] ?? "",
+          row.values[groupKey]?.[currentStartYear] ?? "",
+          row.values[groupKey]?.[currentEndYear] ?? ""
         ])].map(fields => fields.map(csvField).join(",")).join("\r\n");
 
         const blob = new Blob([lines], { type: "text/csv;charset=utf-8;" });
@@ -455,13 +476,8 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
       showHoverOutline(feature);
 
-      const changes = computeGroupChanges(row, currentStartYear, currentEndYear);
-      const changesList = changes
-        .map(({ groupKey, change }, i) => {
-          const line = `${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${d3.format("+,")(change)}`;
-          return i === 0 ? `<strong>${line}</strong>` : line;
-        })
-        .join("<br>");
+      const ownChange = row.values[groupKey]?.[currentEndYear] - row.values[groupKey]?.[currentStartYear];
+      const changesList = `<strong>${escapeHTML(GROWTH_GROUPS[groupKey].label)}: ${d3.format("+,")(ownChange)}</strong>`;
 
       const totalPopulation = row.values.total?.[currentEndYear];
       const totalText = Number.isFinite(totalPopulation)
