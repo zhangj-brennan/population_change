@@ -53,11 +53,17 @@
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 14px;
-      max-width: 460px;
+      position: relative;
+      z-index: 11;
+      max-width: 720px;
     }
 
     .geo-controls-row .state-select-label {
       flex: 1 1 160px;
+    }
+
+    .geo-controls-row .county-search-label {
+      flex: 1.4 1 220px;
     }
 
     .county-table th {
@@ -93,6 +99,25 @@
         </header>
 
         <div class="geo-controls-row">
+          <label class="county-search-label" for="county-search-input">
+            <span class="control-label">Search for a county</span>
+            <div class="county-search-input-wrap">
+              <input
+                type="text"
+                id="county-search-input"
+                class="county-search-input"
+                placeholder="e.g. Cook County, Illinois"
+                autocomplete="off"
+                spellcheck="false"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="county-search-suggestions"
+                aria-autocomplete="list"
+              >
+              <button type="button" id="county-search-clear" class="county-search-clear" hidden aria-label="Clear county search">&times;</button>
+              <ul id="county-search-suggestions" class="county-search-suggestions" role="listbox" hidden></ul>
+            </div>
+          </label>
           <label class="state-select-label" for="state-select">
             <span class="control-label">Select a state</span>
             <select id="state-select" aria-label="Select a state">
@@ -166,6 +191,7 @@
     </section>
   </main>
 
+  <script src="county-search.js"></script>
   <script src="growth-map.js"></script>
   <script>
     renderGrowthMap({

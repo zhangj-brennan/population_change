@@ -456,6 +456,8 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
     if (stateSelect) {
       stateSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectState(stateSelect.value || null);
       });
     }
@@ -463,10 +465,40 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
     if (regionSelect) {
       regionSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectRegion(regionSelect.value || null);
       });
     }
 
+
+    // County search: jumps to the county's state and outlines it, like the
+    // main map's search box. Picking a state or region by hand clears it.
+    const featureByFips = new Map(includedFeatures.map(feature => [featureFips(feature), feature]));
+
+    function outlineSearchedCounty(fips) {
+      const feature = fips ? featureByFips.get(fips) : null;
+      highlightLayer.selectAll(".county-highlight-outline")
+        .data(feature ? [feature] : [])
+        .join("path")
+        .attr("class", "county-highlight-outline")
+        .attr("d", path);
+    }
+
+    const countySearch = wireCountySearch({
+      rows: componentsRows,
+      onSelect(fips) {
+        const row = countyByFips.get(fips);
+        if (!row) return;
+        hideTooltip();
+        selectState(row.stateFips);
+        outlineSearchedCounty(fips);
+      },
+      onClear() {
+        outlineSearchedCounty(null);
+        selectState(null);
+      }
+    });
 
     updateFills(DEFAULT_PERIOD);
 
@@ -622,7 +654,106 @@ async function renderTwoFactorMap({
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
         statusText.textContent = `${d3.format(",")(countA)} counties${geographySuffix} where ${factorALabel} led, ${d3.format(",")(countB)} where ${factorBLabel} led, ${PERIODS[period].label}`;
       }
+
+      updateTable();
     }
+
+    /*
+      Table under the map: one tab per outcome (factor A led, factor B led,
+      neither grew the county), limited to the same state/region and period
+      as the map. Each tab defaults to its own most natural sort.
+    */
+    const tableBody = document.querySelector("#factor-table-body");
+    const tableTabs = Array.from(document.querySelectorAll(".factor-tab"));
+    const sortButtons = Array.from(document.querySelectorAll(".factor-table .sort-button"));
+    const TAB_DEFAULT_SORT = {
+      a: { key: "a", direction: "descending" },
+      b: { key: "b", direction: "descending" },
+      neither: { key: "total", direction: "ascending" }
+    };
+    let activeTab = "a";
+    let tableSort = { ...TAB_DEFAULT_SORT[activeTab] };
+
+    function tableRowFor(row) {
+      const values = row.values[currentPeriod];
+      return {
+        county: row.countyName,
+        state: row.stateName,
+        a: values[factorAKey],
+        b: values[factorBKey],
+        total: values.total
+      };
+    }
+
+    function updateTable() {
+      if (!tableBody) return;
+
+      const rowsByTab = { a: [], b: [], neither: [] };
+      componentsRows.forEach(row => {
+        if (isOutOfScope(row)) return;
+        const result = winnerByFips.get(row.fips);
+        if (!result) return;
+        const tab = result.winner === factorAKey ? "a" : result.winner === factorBKey ? "b" : "neither";
+        rowsByTab[tab].push(tableRowFor(row));
+      });
+
+      document.querySelectorAll(".factor-tab-count").forEach(span => {
+        span.textContent = `(${d3.format(",")(rowsByTab[span.dataset.count].length)})`;
+      });
+
+      tableTabs.forEach(tab => {
+        tab.setAttribute("aria-selected", String(tab.dataset.tab === activeTab));
+      });
+
+      const { key, direction } = tableSort;
+      const compare = key === "county" || key === "state"
+        ? (x, y) => d3[direction](x[key], y[key]) || d3.ascending(x.state, y.state)
+        : (x, y) => d3[direction](x[key], y[key]);
+      const rows = rowsByTab[activeTab].slice().sort(compare);
+
+      sortButtons.forEach(button => {
+        const isActive = button.dataset.sortKey === key;
+        button.closest("th").setAttribute("aria-sort", isActive ? direction : "none");
+        button.querySelector(".sort-arrow").textContent = isActive
+          ? (direction === "ascending" ? "▲" : "▼")
+          : "";
+      });
+
+      if (!rows.length) {
+        tableBody.innerHTML = `<tr><td class="county-table-empty" colspan="5">No counties</td></tr>`;
+        return;
+      }
+
+      const formatChange = value => (Number.isFinite(value) ? d3.format("+,")(value) : "—");
+      tableBody.innerHTML = rows.map(row => `
+        <tr>
+          <td>${escapeHTML(row.county)}</td>
+          <td>${escapeHTML(row.state)}</td>
+          <td class="numeric">${formatChange(row.a)}</td>
+          <td class="numeric">${formatChange(row.b)}</td>
+          <td class="numeric">${formatChange(row.total)}</td>
+        </tr>
+      `).join("");
+    }
+
+    tableTabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        activeTab = tab.dataset.tab;
+        tableSort = { ...TAB_DEFAULT_SORT[activeTab] };
+        updateTable();
+      });
+    });
+
+    sortButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.sortKey;
+        const isText = key === "county" || key === "state";
+        tableSort = tableSort.key === key
+          ? { key, direction: tableSort.direction === "ascending" ? "descending" : "ascending" }
+          : { key, direction: isText ? "ascending" : "descending" };
+        updateTable();
+      });
+    });
 
     function showTooltip(event, feature) {
       const fips = featureFips(feature);
@@ -731,6 +862,8 @@ async function renderTwoFactorMap({
     if (stateSelect) {
       stateSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectState(stateSelect.value || null);
       });
     }
@@ -738,10 +871,40 @@ async function renderTwoFactorMap({
     if (regionSelect) {
       regionSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectRegion(regionSelect.value || null);
       });
     }
 
+
+    // County search: jumps to the county's state and outlines it, like the
+    // main map's search box. Picking a state or region by hand clears it.
+    const featureByFips = new Map(includedFeatures.map(feature => [featureFips(feature), feature]));
+
+    function outlineSearchedCounty(fips) {
+      const feature = fips ? featureByFips.get(fips) : null;
+      highlightLayer.selectAll(".county-highlight-outline")
+        .data(feature ? [feature] : [])
+        .join("path")
+        .attr("class", "county-highlight-outline")
+        .attr("d", path);
+    }
+
+    const countySearch = wireCountySearch({
+      rows: componentsRows,
+      onSelect(fips) {
+        const row = countyByFips.get(fips);
+        if (!row) return;
+        hideTooltip();
+        selectState(row.stateFips);
+        outlineSearchedCounty(fips);
+      },
+      onClear() {
+        outlineSearchedCounty(null);
+        selectState(null);
+      }
+    });
 
     updateFills(DEFAULT_PERIOD);
 

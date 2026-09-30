@@ -57,11 +57,72 @@
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 14px;
-      max-width: 460px;
+      position: relative;
+      z-index: 11;
+      max-width: 720px;
     }
 
     .geo-controls-row .state-select-label {
       flex: 1 1 160px;
+    }
+
+    .geo-controls-row .county-search-label {
+      flex: 1.4 1 220px;
+    }
+
+    .factor-table-section {
+      margin-top: 28px;
+    }
+
+    .factor-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .factor-tab {
+      padding: 4px 10px;
+      border: 1px solid #777;
+      border-radius: 0;
+      color: #111;
+      background: #fff;
+      font: inherit;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .factor-tab:hover {
+      border-color: #111;
+    }
+
+    .factor-tab[aria-selected="true"] {
+      border-color: #111;
+      color: #fff;
+      background: #111;
+    }
+
+    .factor-tab-count {
+      font-weight: 400;
+    }
+
+    .factor-table-wrap {
+      max-height: 480px;
+      overflow-y: auto;
+    }
+
+    /* Base .county-table styles assume three text columns; this one has two. */
+    .factor-table th:nth-child(3),
+    .factor-table td:nth-child(3) {
+      min-width: 0;
+      max-width: none;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .factor-table th:nth-child(n + 3) .sort-button {
+      justify-content: flex-end;
     }
 
   </style>
@@ -91,6 +152,25 @@
         </header>
 
         <div class="geo-controls-row">
+          <label class="county-search-label" for="county-search-input">
+            <span class="control-label">Search for a county</span>
+            <div class="county-search-input-wrap">
+              <input
+                type="text"
+                id="county-search-input"
+                class="county-search-input"
+                placeholder="e.g. Cook County, Illinois"
+                autocomplete="off"
+                spellcheck="false"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="county-search-suggestions"
+                aria-autocomplete="list"
+              >
+              <button type="button" id="county-search-clear" class="county-search-clear" hidden aria-label="Clear county search">&times;</button>
+              <ul id="county-search-suggestions" class="county-search-suggestions" role="listbox" hidden></ul>
+            </div>
+          </label>
           <label class="state-select-label" for="state-select">
             <span class="control-label">Select a state</span>
             <select id="state-select" aria-label="Select a state">
@@ -140,10 +220,50 @@
           </span>
         </div>
 
+        <section class="factor-table-section" aria-label="Counties by leading factor">
+          <div class="factor-tabs" role="tablist" aria-label="Leading factor">
+            <button type="button" role="tab" class="factor-tab" data-tab="a" aria-selected="true" aria-controls="factor-table-wrap">
+              Natural change led <span class="factor-tab-count" data-count="a"></span>
+            </button>
+            <button type="button" role="tab" class="factor-tab" data-tab="b" aria-selected="false" aria-controls="factor-table-wrap">
+              Immigration led <span class="factor-tab-count" data-count="b"></span>
+            </button>
+            <button type="button" role="tab" class="factor-tab" data-tab="neither" aria-selected="false" aria-controls="factor-table-wrap">
+              Neither grew <span class="factor-tab-count" data-count="neither"></span>
+            </button>
+          </div>
+
+          <div class="county-table-wrap factor-table-wrap" id="factor-table-wrap" role="tabpanel">
+            <table class="county-table factor-table">
+              <thead>
+                <tr>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="county">County<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="state">State<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="a">Natural change<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="b">Immigration<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                  <th scope="col" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="total">Total change<span class="sort-arrow" aria-hidden="true"></span></button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="factor-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
       </div>
     </section>
   </main>
 
+  <script src="county-search.js"></script>
   <script src="components-map.js"></script>
   <script>
     renderTwoFactorMap({

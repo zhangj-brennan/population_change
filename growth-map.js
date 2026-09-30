@@ -626,6 +626,8 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
       stateSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectState(stateSelect.value || null);
       });
     }
@@ -637,9 +639,39 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
 
       regionSelect.addEventListener("change", () => {
         hideTooltip();
+        countySearch.reset();
+        outlineSearchedCounty(null);
         selectRegion(regionSelect.value || null);
       });
     }
+
+    // County search: jumps to the county's state and outlines it, like the
+    // main map's search box. Picking a state or region by hand clears it.
+    const featureByFips = new Map(includedFeatures.map(feature => [featureFips(feature), feature]));
+
+    function outlineSearchedCounty(fips) {
+      const feature = fips ? featureByFips.get(fips) : null;
+      highlightLayer.selectAll(".county-highlight-outline")
+        .data(feature ? [feature] : [])
+        .join("path")
+        .attr("class", "county-highlight-outline")
+        .attr("d", path);
+    }
+
+    const countySearch = wireCountySearch({
+      rows: countyRows,
+      onSelect(fips) {
+        const row = countyByFips.get(fips);
+        if (!row) return;
+        hideTooltip();
+        selectState(row.stateFips);
+        outlineSearchedCounty(fips);
+      },
+      onClear() {
+        outlineSearchedCounty(null);
+        selectState(null);
+      }
+    });
 
     updateFills(DEFAULT_START_YEAR, DEFAULT_END_YEAR);
 

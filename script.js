@@ -39,7 +39,7 @@ const URBAN_RURAL_SLUG_TO_LABEL = {
   dropdown list; these back the overlay span shown when it's collapsed.
 */
 const SIGN_FILTER_LABELS = {
-  all: "all changes, including no change",
+  all: "increases and decreases",
   positive: "increase only",
   negative: "decrease only",
   zero: "no change"
