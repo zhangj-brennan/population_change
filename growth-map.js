@@ -8,9 +8,9 @@
 // of years that comparison runs over.
 // ---------------------------------------------------------------------------
 const FILES = {
-  population: "data/Vintage 2025 counties race & ethnicity 1.csv",
-  counties: "counties_2025_5mScale.geojson",
-  states: "states_2025_5mScale.geojson"
+  population: "data_in_use/Vintage 2025 counties race & ethnicity 1.csv",
+  counties: "data_in_use/counties_2025_5mScale.geojson",
+  states: "data_in_use/states_2025_5mScale.geojson"
 };
 
 const DEFAULT_START_YEAR = 2020;

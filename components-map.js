@@ -7,9 +7,9 @@
 // a two-way period toggle instead of start/end year dropdowns.
 // ---------------------------------------------------------------------------
 const FILES = {
-  components: "data/counties_components_of_change.csv",
-  counties: "counties_2025_5mScale.geojson",
-  states: "states_2025_5mScale.geojson"
+  components: "data_in_use/counties_components_of_change.csv",
+  counties: "data_in_use/counties_2025_5mScale.geojson",
+  states: "data_in_use/states_2025_5mScale.geojson"
 };
 
 const PERIODS = {
