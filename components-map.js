@@ -748,6 +748,17 @@ async function renderTwoFactorMap({
       });
     });
 
+    const tableToggle = document.querySelector("#county-table-toggle");
+    const tableSection = document.querySelector("#factor-table-section");
+    if (tableToggle && tableSection) {
+      tableToggle.addEventListener("click", () => {
+        const isHidden = tableSection.hidden;
+        tableSection.hidden = !isHidden;
+        tableToggle.textContent = isHidden ? "Hide table" : "Show table";
+        tableToggle.setAttribute("aria-expanded", String(isHidden));
+      });
+    }
+
     sortButtons.forEach(button => {
       button.addEventListener("click", () => {
         const key = button.dataset.sortKey;

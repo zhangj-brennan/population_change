@@ -73,7 +73,7 @@
     }
 
     .factor-table-section {
-      margin-top: 28px;
+      margin-top: 4px;
     }
 
     .factor-tabs {
@@ -227,7 +227,11 @@
           </span>
         </div>
 
-        <section class="factor-table-section" aria-label="Counties by leading factor">
+        <div class="status-buttons">
+          <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="factor-table-section">Show table</button>
+        </div>
+
+        <section class="factor-table-section" id="factor-table-section" aria-label="Counties by leading factor" hidden>
           <div class="factor-tabs" role="tablist" aria-label="Leading factor">
             <button type="button" role="tab" class="factor-tab" data-tab="a" aria-selected="true" aria-controls="factor-table-wrap">
               Natural change led <span class="factor-tab-count" data-count="a"></span>
