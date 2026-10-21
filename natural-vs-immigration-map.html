@@ -295,7 +295,7 @@
 
       function reportHeight() {
         window.parent.postMessage(
-          { type: "county-map-resize", height: document.documentElement.scrollHeight },
+          { type: "county-map-resize", height: Math.ceil(document.body.getBoundingClientRect().height) },
           "*"
         );
       }

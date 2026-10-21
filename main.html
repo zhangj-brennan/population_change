@@ -154,7 +154,6 @@
           <span id="status-text" aria-live="polite"></span>
           <span class="status-buttons">
             <button type="button" id="county-table-toggle" class="county-table-toggle" aria-expanded="false" aria-controls="county-table-wrap">Show table</button>
-            <button type="button" id="county-table-export" class="county-table-toggle">Export CSV</button>
           </span>
         </div>
 
@@ -207,7 +206,7 @@
 
       function reportHeight() {
         window.parent.postMessage(
-          { type: "county-map-resize", height: document.documentElement.scrollHeight },
+          { type: "county-map-resize", height: Math.ceil(document.body.getBoundingClientRect().height) },
           "*"
         );
       }
