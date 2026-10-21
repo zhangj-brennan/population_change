@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Counties Where Immigration Led Growth, 2020–2025</title>
+  <title>Immigration</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     .map-header h1 {
       font-size: 20px;
       line-height: 1.4;
-      font-weight: 400;
+      font-weight: 700;
       margin: 0 0 6px;
+      padding-top: 3px;
+      border-top: 2px solid #000;
     }
 
     .growth-legend {
@@ -36,18 +38,6 @@
       border: 1px solid rgba(0, 0, 0, 0.15);
     }
 
-    .growth-legend-scale {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .growth-legend-gradient {
-      width: 140px;
-      height: 12px;
-      border: 1px solid #aaa;
-    }
-
     .geo-controls-row {
       display: flex;
       flex-wrap: wrap;
@@ -66,6 +56,12 @@
       flex: 1.4 1 220px;
     }
 
+    .map-subtitle {
+      margin: 16px 0 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
   </style>
 </head>
 <body>
@@ -79,20 +75,17 @@
     <section id="visualization" class="visualization" hidden>
       <div class="map-column">
         <header class="map-header">
-          <h1>
-            Where immigration was the largest factor of county growth, over the
-            <span class="inline-select-wrap">
-              <select id="period-select" class="inline-select" aria-label="Time period">
-                <option value="cumulative">2020–2025 period</option>
-                <option value="annual">most recent year (2024–2025)</option>
-              </select>
-              <span class="inline-select-arrow" aria-hidden="true">▾</span>
-            </span>
-          </h1>
-          <p id="status-text" aria-live="polite"></p>
+          <h1>Immigration</h1>
         </header>
 
         <div class="geo-controls-row">
+          <label class="state-select-label" for="period-select">
+            <span class="control-label">Select time period:</span>
+            <select id="period-select" aria-label="Select time period">
+              <option value="cumulative">2020–2025</option>
+              <option value="annual">Most recent year (2024–2025)</option>
+            </select>
+          </label>
           <label class="county-search-label" for="county-search-input">
             <span class="control-label">Search for a county</span>
             <div class="county-search-input-wrap">
@@ -127,6 +120,8 @@
           </label>
         </div>
 
+        <p id="status-text" class="map-subtitle" aria-live="polite"></p>
+
         <div class="map-wrap">
           <svg
             id="county-map"
@@ -142,16 +137,12 @@
 
         <div class="growth-legend">
           <span class="growth-legend-item">
-            <span class="growth-legend-scale">
-              Fewer added
-              <span id="growth-legend-gradient" class="growth-legend-gradient"></span>
-              More added
-            </span>
-            — international migration (immigration) was the largest factor of growth
+            <span class="growth-legend-swatch" style="background:#711471;"></span>
+            international migration (immigration) was the largest factor of growth
           </span>
           <span class="growth-legend-item">
             <span class="growth-legend-swatch" style="background:#ededed;"></span>
-            Another factor led, or the county did not grow
+            Another component added more people, or no component grew
           </span>
         </div>
 
@@ -168,7 +159,8 @@
     renderComponentsMap({
       factorKey: "international",
       factorLabel: "immigration",
-      highlightColor: "#711471"
+      highlightColor: "#711471",
+      solidFill: true
     });
   </script>
 </body>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="../">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Counties Where Immigration Led Growth, 2020–2025</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    .map-header h1 {
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 400;
+      margin: 0 0 6px;
+    }
+
+    .growth-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin: 14px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .growth-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .growth-legend-swatch {
+      width: 12px;
+      height: 12px;
+      flex: none;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .growth-legend-scale {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .growth-legend-gradient {
+      width: 140px;
+      height: 12px;
+      border: 1px solid #aaa;
+    }
+
+    .geo-controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      position: relative;
+      z-index: 11;
+      max-width: 720px;
+    }
+
+    .geo-controls-row .state-select-label {
+      flex: 1 1 160px;
+    }
+
+    .geo-controls-row .county-search-label {
+      flex: 1.4 1 220px;
+    }
+
+  </style>
+</head>
+<body>
+  <main class="county-map-app">
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading county boundaries and population data…
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section id="visualization" class="visualization" hidden>
+      <div class="map-column">
+        <header class="map-header">
+          <h1>
+            Where immigration was the largest factor of county growth, over the
+            <span class="inline-select-wrap">
+              <select id="period-select" class="inline-select" aria-label="Time period">
+                <option value="cumulative">2020–2025 period</option>
+                <option value="annual">most recent year (2024–2025)</option>
+              </select>
+              <span class="inline-select-arrow" aria-hidden="true">▾</span>
+            </span>
+          </h1>
+          <p id="status-text" aria-live="polite"></p>
+        </header>
+
+        <div class="geo-controls-row">
+          <label class="county-search-label" for="county-search-input">
+            <span class="control-label">Search for a county</span>
+            <div class="county-search-input-wrap">
+              <input
+                type="text"
+                id="county-search-input"
+                class="county-search-input"
+                placeholder="e.g. Cook County, Illinois"
+                autocomplete="off"
+                spellcheck="false"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="county-search-suggestions"
+                aria-autocomplete="list"
+              >
+              <button type="button" id="county-search-clear" class="county-search-clear" hidden aria-label="Clear county search">&times;</button>
+              <ul id="county-search-suggestions" class="county-search-suggestions" role="listbox" hidden></ul>
+            </div>
+          </label>
+          <label class="state-select-label" for="state-select">
+            <span class="control-label">Select a state</span>
+            <select id="state-select" aria-label="Select a state">
+              <option value="">All states</option>
+            </select>
+          </label>
+
+          <label class="state-select-label" for="region-select">
+            <span class="control-label">Select a region</span>
+            <select id="region-select" aria-label="Select a region">
+              <option value="">All regions</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="map-wrap">
+          <svg
+            id="county-map"
+            viewBox="0 0 975 610"
+            role="img"
+            aria-label="Map of counties where immigration was the largest factor of population growth"
+          ></svg>
+          <div id="tooltip" class="tooltip" aria-hidden="true">
+            <button type="button" id="tooltip-close" class="tooltip-close" aria-label="Close">&times;</button>
+            <div id="tooltip-content"></div>
+          </div>
+        </div>
+
+        <div class="growth-legend">
+          <span class="growth-legend-item">
+            <span class="growth-legend-scale">
+              Fewer added
+              <span id="growth-legend-gradient" class="growth-legend-gradient"></span>
+              More added
+            </span>
+            — international migration (immigration) was the largest factor of growth
+          </span>
+          <span class="growth-legend-item">
+            <span class="growth-legend-swatch" style="background:#ededed;"></span>
+            Another factor led, or the county did not grow
+          </span>
+        </div>
+
+        <p class="source-note">
+          <strong>Source:</strong> U.S. Census Bureau, Vintage 2025 population estimates for counties.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script src="county-search.js"></script>
+  <script src="components-map.js"></script>
+  <script>
+    renderComponentsMap({
+      factorKey: "international",
+      factorLabel: "immigration",
+      highlightColor: "#711471"
+    });
+  </script>
+</body>
+</html>

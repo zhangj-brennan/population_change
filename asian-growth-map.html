@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Counties Where Asian Population Growth Led, 2020–2025</title>
+  <title>Asian Population Growth</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     .map-header h1 {
       font-size: 20px;
       line-height: 1.4;
-      font-weight: 400;
+      font-weight: 700;
       margin: 0 0 6px;
+      padding-top: 3px;
+      border-top: 2px solid #000;
     }
 
     .growth-legend {
@@ -36,18 +38,6 @@
       border: 1px solid rgba(0, 0, 0, 0.15);
     }
 
-    .growth-legend-scale {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .growth-legend-gradient {
-      width: 140px;
-      height: 12px;
-      border: 1px solid #aaa;
-    }
-
     .geo-controls-row {
       display: flex;
       flex-wrap: wrap;
@@ -70,6 +60,12 @@
       padding: 7px 8px;
     }
 
+    .map-subtitle {
+      margin: 16px 0 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
   </style>
 </head>
 <body>
@@ -83,22 +79,18 @@
     <section id="visualization" class="visualization" hidden>
       <div class="map-column">
         <header class="map-header">
-          <h1>
-            Where Asian population growth was the largest source of county growth, when comparing
-            <span class="inline-select-wrap">
-              <select id="start-year" class="inline-select" aria-label="Start year"></select>
-              <span class="inline-select-arrow" aria-hidden="true">▾</span>
-            </span>
-            and
-            <span class="inline-select-wrap">
-              <select id="end-year" class="inline-select" aria-label="End year"></select>
-              <span class="inline-select-arrow" aria-hidden="true">▾</span>
-            </span>
-          </h1>
-          <p id="status-text" aria-live="polite"></p>
+          <h1>Asian Population Growth</h1>
         </header>
 
         <div class="geo-controls-row">
+          <label class="state-select-label" for="start-year">
+            <span class="control-label">Select start year:</span>
+            <select id="start-year" aria-label="Select start year"></select>
+          </label>
+          <label class="state-select-label" for="end-year">
+            <span class="control-label">Select end year:</span>
+            <select id="end-year" aria-label="Select end year"></select>
+          </label>
           <label class="county-search-label" for="county-search-input">
             <span class="control-label">Search for a county</span>
             <div class="county-search-input-wrap">
@@ -133,6 +125,8 @@
           </label>
         </div>
 
+        <p id="status-text" class="map-subtitle" aria-live="polite"></p>
+
         <div class="map-wrap">
           <svg
             id="county-map"
@@ -148,16 +142,12 @@
 
         <div class="growth-legend">
           <span class="growth-legend-item">
-            <span class="growth-legend-scale">
-              Fewer added
-              <span id="growth-legend-gradient" class="growth-legend-gradient"></span>
-              More added
-            </span>
-            — Asian, non-Hispanic population was the largest source of growth
+            <span class="growth-legend-swatch" style="background:#711471;"></span>
+            Asian, non-Hispanic population was the largest source of growth
           </span>
           <span class="growth-legend-item">
             <span class="growth-legend-swatch" style="background:#ededed;"></span>
-            Another group led, or the county did not grow
+            Another group added more people, or no group grew
           </span>
         </div>
 
@@ -196,7 +186,8 @@
     renderGrowthMap({
       groupKey: "asian",
       groupLabel: "the Asian, non-Hispanic population",
-      highlightColor: "#711471"
+      highlightColor: "#711471",
+      solidFill: true
     });
   </script>
 </body>

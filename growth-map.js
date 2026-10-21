@@ -216,7 +216,9 @@ function csvField(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
-async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColor = "#ededed" }) {
+// Pass solidFill: true to draw every qualifying county in highlightColor
+// instead of shading it by size of growth.
+async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColor = "#ededed", solidFill = false }) {
   const loading = document.querySelector("#loading");
   const errorBox = document.querySelector("#error");
   const visualization = document.querySelector("#visualization");
@@ -353,7 +355,9 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
         const dominance = dominantByFips.get(fips);
         const baseColor = (!dominance || dominance.dominantChange <= 0 || dominance.dominantGroup !== groupKey)
           ? mutedColor
-          : colorRamp(Math.min(dominance.dominantChange / maxDominantChange, 1));
+          : solidFill
+            ? highlightColor
+            : colorRamp(Math.min(dominance.dominantChange / maxDominantChange, 1));
 
         if (isOutOfScope(countyByFips.get(fips))) {
           return d3.interpolateRgb(baseColor, "#ffffff")(OUT_OF_SCOPE_FADE_MIX);
@@ -372,7 +376,7 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
             ? REGIONS[selectedRegionKey].label
             : null;
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
-        statusText.textContent = `${d3.format(",")(dominantChanges.length)} counties${geographySuffix} where ${groupLabel} was the largest source of population growth, ${startYear}–${endYear}`;
+        statusText.textContent = `In ${d3.format(",")(dominantChanges.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${groupLabel} was the largest or only source of population growth, ${startYear}–${String(endYear).slice(-2)}.`;
       }
 
       updateTable();

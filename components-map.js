@@ -13,8 +13,8 @@ const FILES = {
 };
 
 const PERIODS = {
-  annual: { label: "2024–2025", prefix: "annual" },
-  cumulative: { label: "2020–2025", prefix: "cumulative" }
+  annual: { label: "2024–2025", shortLabel: "2024–25", prefix: "annual" },
+  cumulative: { label: "2020–2025", shortLabel: "2020–25", prefix: "cumulative" }
 };
 
 const DEFAULT_PERIOD = "cumulative";
@@ -239,7 +239,9 @@ function escapeHTML(value) {
     .replaceAll("'", "&#039;");
 }
 
-async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mutedColor = "#ededed" }) {
+// Pass solidFill: true to draw every qualifying county in highlightColor
+// instead of shading it by size of growth.
+async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mutedColor = "#ededed", solidFill = false }) {
   const loading = document.querySelector("#loading");
   const errorBox = document.querySelector("#error");
   const visualization = document.querySelector("#visualization");
@@ -332,7 +334,9 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
         const dominance = dominantByFips.get(fips);
         const baseColor = (!dominance || dominance.dominantValue <= 0 || dominance.dominantFactor !== factorKey)
           ? mutedColor
-          : colorRamp(Math.min(dominance.dominantValue / maxDominantValue, 1));
+          : solidFill
+            ? highlightColor
+            : colorRamp(Math.min(dominance.dominantValue / maxDominantValue, 1));
 
         if (isOutOfScope(countyByFips.get(fips))) {
           return d3.interpolateRgb(baseColor, "#ffffff")(OUT_OF_SCOPE_FADE_MIX);
@@ -351,7 +355,7 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
             ? REGIONS[selectedRegionKey].label
             : null;
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
-        statusText.textContent = `${d3.format(",")(dominantValues.length)} counties${geographySuffix} where ${factorLabel} was the largest factor of population growth, ${PERIODS[period].label}`;
+        statusText.textContent = `In ${d3.format(",")(dominantValues.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${factorLabel} was the largest or only component of population growth, ${PERIODS[period].shortLabel}.`;
       }
     }
 

@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Natural Change vs. Immigration by County, 2020–2025</title>
+  <title>Natural Change vs. Immigration</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     .map-header h1 {
       font-size: 20px;
       line-height: 1.4;
-      font-weight: 400;
+      font-weight: 700;
       margin: 0 0 6px;
+      padding-top: 3px;
+      border-top: 2px solid #000;
     }
 
     .growth-legend {
@@ -125,6 +127,12 @@
       justify-content: flex-end;
     }
 
+    .map-subtitle {
+      margin: 16px 0 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
   </style>
 </head>
 <body>
@@ -138,20 +146,17 @@
     <section id="visualization" class="visualization" hidden>
       <div class="map-column">
         <header class="map-header">
-          <h1>
-            Natural change vs. immigration as the bigger factor in county growth, over the
-            <span class="inline-select-wrap">
-              <select id="period-select" class="inline-select" aria-label="Time period">
-                <option value="cumulative">2020–2025 period</option>
-                <option value="annual">most recent year (2024–2025)</option>
-              </select>
-              <span class="inline-select-arrow" aria-hidden="true">▾</span>
-            </span>
-          </h1>
-          <p id="status-text" aria-live="polite"></p>
+          <h1>Natural Change vs. Immigration</h1>
         </header>
 
         <div class="geo-controls-row">
+          <label class="state-select-label" for="period-select">
+            <span class="control-label">Select time period:</span>
+            <select id="period-select" aria-label="Select time period">
+              <option value="cumulative">2020–2025</option>
+              <option value="annual">Most recent year (2024–2025)</option>
+            </select>
+          </label>
           <label class="county-search-label" for="county-search-input">
             <span class="control-label">Search for a county</span>
             <div class="county-search-input-wrap">
@@ -185,6 +190,8 @@
             </select>
           </label>
         </div>
+
+        <p id="status-text" class="map-subtitle" aria-live="polite"></p>
 
         <div class="map-wrap">
           <svg
