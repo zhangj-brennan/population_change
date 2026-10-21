@@ -163,5 +163,26 @@
       solidFill: true
     });
   </script>
+  <script>
+    (function () {
+      if (window.parent === window) return;
+
+      function reportHeight() {
+        window.parent.postMessage(
+          { type: "county-map-resize", height: document.documentElement.scrollHeight },
+          "*"
+        );
+      }
+
+      window.addEventListener("load", reportHeight);
+      window.addEventListener("resize", reportHeight);
+
+      if (window.ResizeObserver) {
+        new ResizeObserver(reportHeight).observe(document.body);
+      } else {
+        setInterval(reportHeight, 500);
+      }
+    })();
+  </script>
 </body>
 </html>
