@@ -4,8 +4,8 @@
 // metadata). None of this changes at runtime.
 // ---------------------------------------------------------------------------
 const FILES = {
-  population: "data_in_use/Vintage 2025 counties race & ethnicity 1.csv",
-  urbanRural: "data_in_use/cdc_urban_rural.csv",
+  population: "data_in_use/county_population_by_group_2020_2025.csv",
+  urbanRural: "data_in_use/cdc_urban_rural_codes.csv",
   counties: "data_in_use/counties_2025_5mScale.geojson",
   states: "data_in_use/states_2025_5mScale.geojson"
 };
@@ -1275,27 +1275,26 @@ function updateSelectionTitle() {
   const titleEl = document.querySelector("#selection-title");
   if (!titleEl) return;
 
-  const metricLabel = appState.metric === "percent" ? "Percent change" : "Change";
-  let geographyLabel = "the United States";
-  const highlightedRow = countyByFips.get(appState.highlightedCountyFips);
+  const signLabels = {
+    all: "increases and decreases",
+    positive: "increases",
+    negative: "decreases",
+    zero: "no change"
+  };
+
+  let geographySuffix = "";
 
   if (appState.selectedState) {
-    geographyLabel = STATE_NAMES[STATE_FIPS_TO_ABBR[appState.selectedState]];
+    geographySuffix = ` in ${STATE_NAMES[STATE_FIPS_TO_ABBR[appState.selectedState]]}`;
   } else if (appState.selectedRegion) {
-    geographyLabel = `the ${REGIONS[appState.selectedRegion].label}`;
+    geographySuffix = ` in the ${REGIONS[appState.selectedRegion].label}`;
   }
 
-  const parts = [
-    `${metricLabel} in ${selectedPopulationLabel()}, ${appState.startYear}–${appState.endYear}`,
-    `${TYPE_FILTER_LABELS[appState.division]} in ${geographyLabel}`,
-    SIGN_FILTER_LABELS[appState.signFilter]
-  ];
-
-  if (highlightedRow) {
-    parts.push(`${highlightedRow.countyName} highlighted`);
-  }
-
-  titleEl.textContent = parts.join(" · ");
+  titleEl.textContent = capitalize(
+    `${signLabels[appState.signFilter]} in ${selectedPopulationLabel()} ` +
+    `for ${TYPE_FILTER_LABELS[appState.division]}${geographySuffix}, ` +
+    `${appState.startYear}–${appState.endYear}`
+  );
 }
 
 // ---------------------------------------------------------------------------

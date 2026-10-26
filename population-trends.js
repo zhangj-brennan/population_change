@@ -4,8 +4,8 @@
 // population series (total, or one racial/ethnic subgroup) the lines track.
 // ---------------------------------------------------------------------------
 const FILES = {
-  population: "data_in_use/Vintage 2025 counties race & ethnicity 1.csv",
-  urbanRural: "data_in_use/cdc_urban_rural.csv"
+  population: "data_in_use/county_population_by_group_2020_2025.csv",
+  urbanRural: "data_in_use/cdc_urban_rural_codes.csv"
 };
 
 // NCHS 2023 urban-rural classification scheme, in order from most urban to
