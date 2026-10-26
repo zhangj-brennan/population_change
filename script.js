@@ -305,6 +305,7 @@ buildStateDropdown();
 buildRegionDropdown();
 wireStaticControls();
 wireCountySearch();
+wireResetButton();
 wireCountyTableSorting();
 wireCountyTableToggle();
 wireCountyTableExport();
@@ -918,6 +919,7 @@ function updateMap({ deferDimming = false } = {}) {
   updateStateDropdown();
   updateRegionDropdown();
   updateStatus();
+  updateSelectionTitle();
   updateCountyTable();
   updateURLState();
 }
@@ -1263,6 +1265,37 @@ function updateStatus() {
 
   document.querySelector("#status-text").textContent =
     `${d3.format(",")(shownCount)} counties shown · ${geographyLabel}`;
+}
+
+/*
+  Plain-language heading above the map restating the current selection,
+  since the dropdowns that drive it sit some distance above.
+*/
+function updateSelectionTitle() {
+  const titleEl = document.querySelector("#selection-title");
+  if (!titleEl) return;
+
+  const metricLabel = appState.metric === "percent" ? "Percent change" : "Change";
+  let geographyLabel = "the United States";
+  const highlightedRow = countyByFips.get(appState.highlightedCountyFips);
+
+  if (appState.selectedState) {
+    geographyLabel = STATE_NAMES[STATE_FIPS_TO_ABBR[appState.selectedState]];
+  } else if (appState.selectedRegion) {
+    geographyLabel = `the ${REGIONS[appState.selectedRegion].label}`;
+  }
+
+  const parts = [
+    `${metricLabel} in ${selectedPopulationLabel()}, ${appState.startYear}–${appState.endYear}`,
+    `${TYPE_FILTER_LABELS[appState.division]} in ${geographyLabel}`,
+    SIGN_FILTER_LABELS[appState.signFilter]
+  ];
+
+  if (highlightedRow) {
+    parts.push(`${highlightedRow.countyName} highlighted`);
+  }
+
+  titleEl.textContent = parts.join(" · ");
 }
 
 // ---------------------------------------------------------------------------
@@ -1897,6 +1930,18 @@ function wireStaticControls() {
     });
 }
 
+function wireResetButton() {
+  const button = document.querySelector("#reset-filters");
+  if (!button) return;
+
+  button.addEventListener("click", () => {
+    resetAppStateToDefaults();
+    hideTooltip();
+    closeCountySearchSuggestions();
+    syncControlsToAppState();
+  });
+}
+
 function resetCountySearch() {
   appState.highlightedCountyFips = null;
 
@@ -1913,7 +1958,7 @@ function resetCountySearch() {
 // Browser back/forward: reset to defaults then re-apply whatever the URL
 // says, so navigating history moves the map instead of just the address bar.
 // ---------------------------------------------------------------------------
-window.addEventListener("popstate", () => {
+function resetAppStateToDefaults() {
   appState.division = "all";
   appState.groups = ["total"];
   appState.metric = "count";
@@ -1924,8 +1969,19 @@ window.addEventListener("popstate", () => {
   appState.selectedRegion = null;
   appState.highlightedCountyFips = null;
   appState.tableSort = null;
-  readURLState();
+}
 
+window.addEventListener("popstate", () => {
+  resetAppStateToDefaults();
+  readURLState();
+  syncControlsToAppState();
+});
+
+/*
+  Pushes appState back out to every control, the zoom and the map — shared
+  by browser back/forward and the Reset button.
+*/
+function syncControlsToAppState() {
   if (!availableYears.length || !countyLayer || !stateLayer) return;
 
   populateYearControls();
@@ -1958,7 +2014,7 @@ window.addEventListener("popstate", () => {
       : [];
   zoomToStateFips(stateFipsList);
   updateMap();
-});
+}
 
 // ---------------------------------------------------------------------------
 // Small formatting/utility helpers used throughout the file above.

@@ -27,6 +27,43 @@
       flex: 1 1 160px;
     }
 
+    /* Year dropdowns match the width of one column in the row above. */
+    .year-controls-row .state-select-label {
+      flex: 0 1 calc((100% - 16px) / 3);
+    }
+
+    @media (min-width: 521px) {
+      .controls-row {
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+      }
+    }
+
+    .reset-filters {
+      align-self: end;
+      padding: 5px 12px;
+      border: 1px solid #777;
+      border-radius: 0;
+      color: #111;
+      background: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .reset-filters:hover {
+      color: #fff;
+      background: #111;
+    }
+
+    .selection-title {
+      margin: 16px 0 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .selection-title + .metric-toggle-row {
+      margin-top: 12px;
+    }
+
   </style>
 </head>
 <body>
@@ -69,6 +106,8 @@
           <option value="noncore">noncore counties</option>
         </select>
       </label>
+    </div>
+    <div class="filter-controls-row year-controls-row">
       <label class="state-select-label" for="start-year">
         <span class="control-label">Select start year:</span>
         <select id="start-year" aria-label="Select start year"></select>
@@ -113,7 +152,10 @@
             <option value="">All regions</option>
           </select>
         </label>
+
+        <button type="button" id="reset-filters" class="reset-filters">Reset</button>
         </section>
+    <p id="selection-title" class="selection-title" aria-live="polite"></p>
     <div class="metric-toggle-row">
       <div class="toggle-switch" id="metric-controls">
         <button type="button" class="is-active" data-value="count">Count</button>

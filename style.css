@@ -203,9 +203,9 @@ select {
   fully transparent, so the wrap's width follows the current label instead.
   Text kept in sync in JS via syncInlineSelectDisplay().
 */
-#sign-filter,
-#type-filter,
-#group-select {
+.inline-select-wrap > #sign-filter,
+.inline-select-wrap > #type-filter,
+.inline-select-wrap > #group-select {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -447,6 +447,13 @@ select {
   margin-top: 14px;
 }
 
+/* Search, state and region stay on one row except on narrow phones. */
+@media (max-width: 520px) {
+  .controls-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .county-search-label {
   display: grid;
   min-width: 0;
@@ -529,11 +536,18 @@ select {
 .state-select-label select {
   width: 100%;
   min-width: 0;
-  padding: 5px 22px 5px 6px;
+  padding: 5px 34px 5px 6px;
   border: 1px solid #777;
   border-radius: 0;
   color: #111;
-  background: #fff;
+  /*
+    The native arrow is pinned to the right edge and can't be moved, so it's
+    replaced with a drawn chevron inset from the edge.
+  */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23111' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 12px center;
   cursor: pointer;
   font-size: 14px;
 }
@@ -602,10 +616,6 @@ select {
 
   .legend-filter {
     --legend-width: 200px;
-  }
-
-  .controls-row {
-    grid-template-columns: 1fr;
   }
 
   .tooltip-close {

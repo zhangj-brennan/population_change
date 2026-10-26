@@ -376,7 +376,7 @@ async function renderGrowthMap({ groupKey, groupLabel, highlightColor, mutedColo
             ? REGIONS[selectedRegionKey].label
             : null;
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
-        statusText.textContent = `In ${d3.format(",")(dominantChanges.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${groupLabel} was the largest or only source of population growth, ${startYear}–${String(endYear).slice(-2)}.`;
+        statusText.textContent = `In ${d3.format(",")(dominantChanges.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${groupLabel} was the largest or only source of population growth, ${startYear}–${endYear}.`;
       }
 
       updateTable();

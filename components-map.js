@@ -13,8 +13,8 @@ const FILES = {
 };
 
 const PERIODS = {
-  annual: { label: "2024–2025", shortLabel: "2024–25", prefix: "annual" },
-  cumulative: { label: "2020–2025", shortLabel: "2020–25", prefix: "cumulative" }
+  annual: { label: "2024–2025", prefix: "annual" },
+  cumulative: { label: "2020–2025", prefix: "cumulative" }
 };
 
 const DEFAULT_PERIOD = "cumulative";
@@ -355,7 +355,7 @@ async function renderComponentsMap({ factorKey, factorLabel, highlightColor, mut
             ? REGIONS[selectedRegionKey].label
             : null;
         const geographySuffix = geographyLabel ? ` in ${geographyLabel}` : "";
-        statusText.textContent = `In ${d3.format(",")(dominantValues.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${factorLabel} was the largest or only component of population growth, ${PERIODS[period].shortLabel}.`;
+        statusText.textContent = `In ${d3.format(",")(dominantValues.length)} of ${d3.format(",")(geographyRows.length)} counties${geographySuffix}, ${factorLabel} was the largest or only component of population growth, ${PERIODS[period].label}.`;
       }
     }
 
